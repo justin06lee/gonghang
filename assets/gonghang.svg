@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 400" width="800" height="400" role="img" aria-labelledby="t">
+  <title id="t">공항 (gonghang)</title>
+  <!-- An airport wayfinding sign, hung from the ceiling: a departures tile,
+       the name, and the three things a port does, pointing the way. -->
+  <!-- hangers -->
+  <g fill="#8b94a3">
+    <rect x="176" y="0" width="8" height="64"/>
+    <rect x="616" y="0" width="8" height="64"/>
+  </g>
+  <!-- the sign -->
+  <rect x="24" y="56" width="752" height="320" rx="22" fill="#1b2431"/>
+  <!-- departures tile: a plane climbing away -->
+  <rect x="64" y="96" width="240" height="240" rx="18" fill="#ffc933"/>
+  <g transform="translate(184 216) rotate(45)" fill="#1b2431">
+    <path d="M0 -92 C9 -92 12 -74 12 -58 L12 74 C12 82 7 88 0 88 C-7 88 -12 82 -12 74 L-12 -58 C-12 -74 -9 -92 0 -92 Z"/>
+    <path d="M4 -30 L88 34 L88 52 L4 20 Z"/>
+    <path d="M-4 -30 L-88 34 L-88 52 L-4 20 Z"/>
+    <path d="M4 48 L38 74 L38 86 L4 78 Z"/>
+    <path d="M-4 48 L-38 74 L-38 86 L-4 78 Z"/>
+  </g>
+  <!-- 공항, drawn rather than typed so it looks the same everywhere -->
+  <g fill="none" stroke="#f7f4ec" stroke-width="15" stroke-linecap="square" stroke-linejoin="miter">
+    <!-- 공 -->
+    <path d="M362 124 H438 V152"/>
+    <path d="M400 168 V190 M348 190 H452"/>
+    <ellipse cx="400" cy="232" rx="30" ry="20"/>
+    <!-- 항 -->
+    <path d="M510 112 V118 M486 134 H536"/>
+    <ellipse cx="511" cy="166" rx="20" ry="16"/>
+    <path d="M574 112 V196 M574 152 H596"/>
+    <ellipse cx="540" cy="232" rx="30" ry="20"/>
+  </g>
+  <!-- the way to each -->
+  <rect x="348" y="278" width="388" height="3" fill="#3a4658"/>
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="21" fill="#aab4c3">
+    <text x="348" y="318"><tspan fill="#ffc933">→</tspan> send</text>
+    <text x="470" y="318"><tspan fill="#ffc933">⇄</tspan> ask · answer</text>
+  </g>
+  <text x="736" y="140" text-anchor="end" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="19" fill="#6c7a8e">gonghang</text>
+</svg>
