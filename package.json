@@ -1,0 +1,46 @@
+{
+  "name": "@justin06lee/gonghang",
+  "version": "0.1.0",
+  "description": "공항: tiny typed messaging between components. One shared contract, a port for each component, an adapter for every boundary.",
+  "type": "module",
+  "license": "MIT",
+  "author": "justin06lee",
+  "keywords": [
+    "messaging",
+    "message-bus",
+    "event-bus",
+    "ports-and-adapters",
+    "hexagonal",
+    "rpc",
+    "typed",
+    "worker",
+    "websocket",
+    "ipc"
+  ],
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "prepack": "bun run build",
+    "prepublishOnly": "bun run typecheck && bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^6.0.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
