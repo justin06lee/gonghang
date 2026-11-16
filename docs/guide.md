@@ -212,7 +212,7 @@ Every frame that comes in through an adapter takes the same path:
 | `relay` | `false` | Pass frames between this port's adapters. |
 | `stacks` | `true` | Send stack traces along with errors. Turn it off on a server whose clients are strangers. |
 | `tap` | none | A function that sees every frame going in or out. Good for logging. |
-| `onError` | `console.error` | Where errors thrown inside `on` handlers and adapters go. |
+| `onError` | `console.error` | Where errors thrown inside `on` handlers, `tap` and adapters go. |
 
 ## What it leaves to you
 

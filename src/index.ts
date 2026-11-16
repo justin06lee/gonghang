@@ -101,7 +101,7 @@ export interface Options {
   stacks?: boolean;
   /** See every frame this port sends out or takes in. Good for logging. */
   tap?: (frame: Frame, direction: "in" | "out") => void;
-  /** Where errors thrown inside your `on` handlers and adapters go. Default: `console.error`. */
+  /** Where errors thrown inside your `on` handlers, your `tap` and adapters go. Default: `console.error`. */
   onError?: (error: unknown) => void;
 }
 
@@ -171,11 +171,20 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
   let count = 0;
   let closed = false;
 
+  /** Show a frame to the tap. A tap only watches, so one that throws must not stop the frame. */
+  const show = (f: Frame, direction: "in" | "out") => {
+    try {
+      options.tap?.(f, direction);
+    } catch (error) {
+      onError(error);
+    }
+  };
+
   /** Make a frame of ours, and show it to the tap. */
   const frame = (kind: Frame["kind"], name: string, rest: Partial<Frame>): Frame => {
     const made: Frame = { channel, id: `${key}#${++count}`, from: me, kind, name, ...rest };
     remember(made.id);
-    options.tap?.(made, "out");
+    show(made, "out");
     return made;
   };
 
@@ -240,7 +249,7 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     const f = read(raw);
     if (closed || !f || f.channel !== channel || seen.has(f.id)) return;
     remember(f.id);
-    options.tap?.(f, "in");
+    show(f, "in");
 
     if (f.kind === "send") hear(f);
     else if (f.kind === "ask") {

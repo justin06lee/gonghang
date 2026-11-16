@@ -277,6 +277,28 @@ describe("ports on one hub", () => {
     expect(seen).toEqual(["out send tick from a", "in send tick from b", "out ask now from a", "in answer now from b"]);
   });
 
+  test("a tap that throws goes to onError and stops nothing", async () => {
+    const hub = memory();
+    const errors: unknown[] = [];
+    const a = connect<App>(hub, {
+      tap: () => {
+        throw new Error("tap");
+      },
+      onError: (error) => errors.push(error),
+    });
+    const b = connect<App>(hub);
+    b.answer("now", () => 1);
+    let ticks = 0;
+    a.on("tick", () => ticks++);
+
+    a.send("tick");
+    b.send("tick");
+
+    expect(ticks).toBe(2);
+    expect(await a.ask("now")).toBe(1);
+    expect(errors).toHaveLength(4); // two sends, the ask and its answer
+  });
+
   test("ports that share a name are still told apart", () => {
     const hub = memory();
     const first = connect<App>(hub, { name: "worker" });

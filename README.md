@@ -222,7 +222,7 @@ connect<App>(adapters, {
   relay: false,      // pass frames between adapters (see Hubs)
   stacks: true,      // send stack traces with errors; turn off facing strangers
   tap: (frame, direction) => console.log(direction, frame), // see every frame
-  onError: (error) => report(error), // errors thrown in on() handlers and adapters
+  onError: (error) => report(error), // errors thrown in on() handlers, tap and adapters
 });
 ```
 
