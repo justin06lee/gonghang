@@ -3,11 +3,12 @@
   "features": [
     "Typed send/on and ask/answer over a shared contract type",
     "Pluggable adapters: memory, worker, broadcast, websocket, lines, custom",
-    "Custom adapter from two functions: send and listen",
+    "Custom adapter from send and listen, with a gone callback",
     "Per-call timeouts for ask",
     "Opt-in relay forwarding frames between adapters",
     "Optional stack traces sent back with errors",
     "tap and onError hooks for observing traffic and failures",
+    "Dead links fail waiting asks at once with disconnected error",
     "Zero dependencies in a single source file",
     "Runnable worker, child process, and WebSocket examples"
   ],
@@ -49,7 +50,15 @@
         "Adapter transmits request to the answering port",
         "port.answer handler computes the result",
         "Reply frame with the same id returns over the adapter",
-        "ask promise resolves, or rejects on error or timeout"
+        "ask promise resolves, or rejects on error, timeout, or disconnect"
+      ]
+    },
+    {
+      "name": "Link loss",
+      "steps": [
+        "Adapter detects the other side is gone",
+        "Adapter calls the gone callback passed to listen",
+        "Port rejects waiting asks at once with a disconnected error"
       ]
     }
   ],
@@ -68,11 +77,19 @@
   ],
   "map": [
     {
-      "name": "Port API (send, on, ask, answer, close)",
+      "name": "Port API (send, on, once, ask, answer, close)",
       "files": [
         "src/index.ts",
         "test/port.test.ts",
         "README.md"
+      ]
+    },
+    {
+      "name": "Link loss and disconnect handling (gone callback, disconnected, closed)",
+      "files": [
+        "src/index.ts",
+        "test/port.test.ts",
+        "docs/guide.md"
       ]
     },
     {
