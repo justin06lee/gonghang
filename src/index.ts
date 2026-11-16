@@ -289,7 +289,7 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     if (f.kind === "send") hear(f);
     else if (f.kind === "ask") {
       const handler = answerers.get(f.name);
-      if (handler) return void reply(f, handler, link); // ours to answer, so it stops here
+      if (handler) return void reply(f, handler, link).catch(onError); // ours to answer, so it stops here
     } else if (settle(f)) return; // the answer to our own ask, so it stops here
 
     if (options.relay) out(f, link);
@@ -361,7 +361,7 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
               }, timeout)
             : undefined;
         waiting.set(question.id, { resolve, reject, timer, away: !local });
-        if (local) return void reply(question, local);
+        if (local) return void reply(question, local).catch(onError);
 
         // A question no adapter would take can never be answered: fail now, with the reason.
         const refused: unknown[] = [];
@@ -440,7 +440,7 @@ function read(raw: unknown): Frame | undefined {
 
 /** Turn whatever a handler threw into plain data that can travel. */
 function describe(error: unknown, withStack: boolean): NonNullable<Frame["error"]> {
-  if (!(error instanceof Error)) return { name: "Error", message: String(error) };
+  if (!(error instanceof Error)) return { name: "Error", message: text(error) };
   const code = (error as { code?: unknown }).code;
   return {
     name: error.name,
@@ -448,6 +448,15 @@ function describe(error: unknown, withStack: boolean): NonNullable<Frame["error"
     ...(withStack && error.stack ? { stack: error.stack } : {}),
     ...(typeof code === "string" || typeof code === "number" ? { code } : {}),
   };
+}
+
+/** `String(value)`, for the values that refuse: an object with no prototype, say. */
+function text(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return Object.prototype.toString.call(value);
+  }
 }
 
 /** Turn it back into an Error on the asking side. */

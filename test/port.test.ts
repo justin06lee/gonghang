@@ -117,6 +117,23 @@ describe("one port", () => {
     expect(errors.map((error) => (error as Error).message)).toEqual(["sync", "async"]);
   });
 
+  test("an answerer may throw anything at all, and the asker still hears at once", async () => {
+    const hub = memory();
+    const a = connect<App>(hub);
+    const b = connect<App>(hub);
+    b.answer("fail", () => {
+      throw Object.create(null); // String() itself throws on this
+    });
+    b.answer("now", () => {
+      throw "just a string";
+    });
+
+    const odd = await failure(a.ask("fail", "odd"));
+    expect(odd).toBeInstanceOf(Error);
+    expect(odd).not.toBeInstanceOf(PortError);
+    expect((await failure(a.ask("now")))?.message).toBe("just a string");
+  });
+
   test("without a contract, anything goes", async () => {
     const port = connect();
     port.answer("double", (n) => n * 2);
