@@ -609,8 +609,15 @@ export type Writable =
  *   const port = connect<App>(lines(child.stdout, child.stdin));      // parent
  *   const port = connect<App>(lines(process.stdin, process.stdout));  // child
  *   const port = connect<App>(lines(socket));                         // both ways on one
+ *
+ * A line longer than `limit` characters is skipped as well, so a peer that
+ * never ends its line cannot fill your memory. Default: 64 million.
  */
-export function lines(input: Readable, output: Writable = input as unknown as Writable): Adapter {
+export function lines(
+  input: Readable,
+  output: Writable = input as unknown as Writable,
+  { limit = 64 * 1024 * 1024 }: { limit?: number } = {},
+): Adapter {
   const writer = "getWriter" in output ? output.getWriter() : undefined;
   const encoder = new TextEncoder();
   return {
@@ -624,12 +631,28 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
     },
     listen(receive, gone) {
       const decoder = new TextDecoder();
-      let rest = "";
+      let rest = ""; // the line still arriving
+      let outgrown = false; // it passed the limit, so what is left of it is dropped as it comes
+
+      /** The line still arriving is complete: hand it over, unless it is blank or outgrew the limit. */
+      const end = () => {
+        if (!outgrown && /\S/.test(rest)) receive(rest);
+        rest = "";
+        outgrown = false;
+      };
+
+      // Only the new text is searched for line ends, so a long line costs no more per chunk than a short one.
       const feed = (chunk: string | Uint8Array) => {
-        rest += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
-        const found = rest.split("\n");
-        rest = found.pop() ?? "";
-        for (const line of found) if (line.trim()) receive(line);
+        const parts = (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true })).split("\n");
+        parts.forEach((part, index) => {
+          if (index) end(); // every "\n" ends the line before it
+          if (outgrown) return;
+          rest += part;
+          if (rest.length > limit) {
+            rest = "";
+            outgrown = true;
+          }
+        });
       };
 
       if ("getReader" in input) {
@@ -643,7 +666,11 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
           }
         })()
           .catch(() => {}) // a stream that breaks has ended just the same
-          .then(() => reading && gone());
+          .then(() => {
+            if (!reading) return;
+            end(); // a last line with no newline after it still counts
+            gone();
+          });
         return () => {
           reading = false;
           try {
@@ -656,6 +683,7 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
       let over = false;
       const ended = () => {
         over = true;
+        end(); // a last line with no newline after it still counts
         gone();
       };
       const sink = "write" in output && output !== (input as unknown) ? output : undefined;

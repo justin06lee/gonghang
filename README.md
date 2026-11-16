@@ -140,6 +140,8 @@ connect<App>(websocket(new WebSocket("wss://example.com/live")));
 
 One frame of JSON per line over any streams: node streams, web streams, a bun `FileSink`. That covers child processes, TCP and unix sockets, and pipes. Lines that aren't frames are skipped, so a stray `console.log` in the child does no harm.
 
+A line longer than 64 million characters is skipped as well, so a peer that never ends its line cannot fill your memory. A third argument moves that limit: `lines(socket, socket, { limit: 1_000_000 })`.
+
 ```ts
 // parent
 const child = Bun.spawn(["bun", "child.ts"], { stdin: "pipe", stdout: "pipe" });

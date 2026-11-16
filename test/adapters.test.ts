@@ -161,6 +161,77 @@ describe("lines", () => {
   });
 });
 
+describe("lines, at the edges", () => {
+  /** A stream to feed by hand: what the port wrote, and the listeners to call. */
+  const pipe = () => {
+    const listeners = new Map<string, (chunk?: unknown) => void>();
+    const written: Frame[] = [];
+    const stream = {
+      on: (event: string, listener: (chunk?: unknown) => void) => void listeners.set(event, listener),
+      off: (event: string) => void listeners.delete(event),
+      write: (line: string) => void written.push(JSON.parse(line)),
+    };
+    return { stream, written, emit: (event: string, chunk?: unknown) => listeners.get(event)?.(chunk) };
+  };
+  const tick = (id: string, name = "tick", extra = {}) => JSON.stringify({ channel: "main", id, from: "x", kind: "send", name, ...extra });
+
+  test("a last line with no newline after it still arrives, before the stream is called gone", async () => {
+    const { stream, written, emit } = pipe();
+    const port = connect<App>(lines(stream), { timeout: 0 });
+    cleanup.push(() => port.close());
+    const asked = port.ask("now");
+
+    const ask = written[0]!;
+    emit("data", JSON.stringify({ channel: "main", id: "x#1", from: "x", kind: "answer", name: "now", to: ask.id, data: 7 }));
+    emit("end");
+
+    expect(await asked).toBe(7);
+  });
+
+  test("and the same over a web stream that closes", async () => {
+    const input = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(tick("x#1", "note", { data: "last words" })));
+        controller.close();
+      },
+    });
+    const port = connect<App>(lines(input, { write: () => {} }));
+    cleanup.push(() => port.close());
+
+    expect(await port.once("note")).toBe("last words");
+  });
+
+  test("a line longer than the limit is skipped, and the lines after it still arrive", () => {
+    const { stream, emit } = pipe();
+    const port = connect<App>(lines(stream, undefined, { limit: 200 }));
+    cleanup.push(() => port.close());
+    const heard: (string | undefined)[] = [];
+    port.on("note", (text) => heard.push(text));
+
+    emit("data", tick("x#1", "note", { data: "before" }) + "\n");
+    for (let i = 0; i < 50; i++) emit("data", "x".repeat(20)); // one endless line, arriving in pieces
+    emit("data", "\n" + tick("x#2", "note", { data: "after" }) + "\n");
+    emit("data", tick("x#3", "note", { data: "y".repeat(300) }) + "\n"); // a real frame, but over the limit
+    emit("data", tick("x#4", "note", { data: "last" }) + "\n");
+
+    expect(heard).toEqual(["before", "after", "last"]);
+  });
+
+  test("a long line arriving in small pieces is put back together", () => {
+    const { stream, emit } = pipe();
+    const port = connect<App>(lines(stream));
+    cleanup.push(() => port.close());
+    const heard: (string | undefined)[] = [];
+    port.on("note", (text) => heard.push(text));
+
+    const big = "공항 ".repeat(40_000);
+    const line = new TextEncoder().encode(tick("x#1", "note", { data: big }) + "\n");
+    for (let at = 0; at < line.length; at += 1000) emit("data", line.slice(at, at + 1000));
+
+    expect(heard).toEqual([big]);
+  });
+});
+
 describe("your own", () => {
   // The adapter from the README: node's process IPC, in two functions.
   const ipc = (child: ChildProcess): Adapter => ({
