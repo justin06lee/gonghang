@@ -5,6 +5,10 @@
   "type": "module",
   "license": "MIT",
   "author": "justin06lee",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justin06lee/gonghang.git"
+  },
   "keywords": [
     "messaging",
     "message-bus",
