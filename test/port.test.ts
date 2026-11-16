@@ -33,6 +33,21 @@ describe("one port", () => {
     expect(ticks).toBe(2);
   });
 
+  test("a handler given twice listens twice, and each stop is its own", () => {
+    const port = connect<App>();
+    let ticks = 0;
+    const handler = () => ticks++;
+    const stop = port.on("tick", handler);
+    port.on("tick", handler);
+
+    port.send("tick");
+    expect(ticks).toBe(2);
+
+    stop();
+    port.send("tick");
+    expect(ticks).toBe(3);
+  });
+
   test("once resolves with the next message only", async () => {
     const port = connect<App>();
     const next = port.once("user.joined");

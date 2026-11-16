@@ -272,8 +272,9 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
 
     on(name: string, handler: (data: any, frame: Frame) => unknown) {
       const set = listeners.get(name) ?? new Set();
-      listeners.set(name, set.add(handler));
-      return () => void set.delete(handler);
+      const listener = (data: unknown, frame: Frame) => handler(data, frame); // one per call, so a handler can listen twice
+      listeners.set(name, set.add(listener));
+      return () => void set.delete(listener);
     },
 
     once(name: string) {
