@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { connect, custom, memory, PortError, type Frame } from "../src/index.ts";
+import { connect, custom, memory, PortError, type Adapter, type Frame } from "../src/index.ts";
 import type { App } from "./contract.ts";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -403,6 +403,68 @@ describe("relay", () => {
 
     expect(ticks).toBe(2);
     expect(await a.ask("now")).toBe(3);
+  });
+});
+
+describe("an adapter whose other side has gone", () => {
+  /** An adapter that goes nowhere, with a handle on the `gone` its port gave it. */
+  const link = () => {
+    const sent: Frame[] = [];
+    let leave = () => {};
+    const adapter: Adapter = { send: (frame) => void sent.push(frame), listen: (_, gone) => void (leave = gone) };
+    return { adapter, sent, leave: () => leave() };
+  };
+
+  test("fails the asks waiting on it, and later ones straight away", async () => {
+    const only = link();
+    const port = connect<App>(only.adapter, { timeout: 0 });
+    const pending = failure(port.ask("now"));
+
+    only.leave();
+
+    expect(await pending).toBeInstanceOf(PortError);
+    expect((await pending)?.code).toBe("disconnected");
+    expect((await failure(port.ask("now")))?.code).toBe("disconnected");
+  });
+
+  test("gets nothing more sent through it", () => {
+    const only = link();
+    const port = connect<App>(only.adapter);
+
+    port.send("tick");
+    only.leave();
+    port.send("tick");
+
+    expect(only.sent).toHaveLength(1);
+  });
+
+  test("an ask keeps waiting while another adapter could still answer", async () => {
+    const [first, second] = [link(), link()];
+    const port = connect<App>([first.adapter, second.adapter], { timeout: 0 });
+    let settled = false;
+    const pending = failure(port.ask("now")).finally(() => (settled = true));
+
+    first.leave();
+    await wait(10);
+    expect(settled).toBe(false);
+
+    second.leave();
+    expect((await pending)?.code).toBe("disconnected");
+  });
+
+  test("what the port answers itself is untouched", async () => {
+    const only = link();
+    const port = connect<App>(only.adapter);
+    port.answer("shout", async (text) => {
+      await wait(20);
+      return text.toUpperCase();
+    });
+    const pending = port.ask("shout", "still here");
+
+    only.leave();
+
+    expect(await pending).toBe("STILL HERE");
+    expect(await port.ask("shout", "and after")).toBe("AND AFTER");
   });
 });
 

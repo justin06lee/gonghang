@@ -90,8 +90,12 @@ export interface Adapter {
    * Start handing incoming frames to `receive`, either as objects or as the
    * JSON text of one. Anything that isn't a frame is ignored, so a transport
    * can be shared. Return a function that stops listening, if there is one.
+   *
+   * If you can tell when the other side has left for good, call `gone` then.
+   * The port stops sending through this adapter, and asks that nothing could
+   * answer any more fail at once instead of waiting out their timeout.
    */
-  listen(receive: (frame: unknown) => void): unknown;
+  listen(receive: (frame: unknown) => void, gone: () => void): unknown;
 }
 
 export interface Options {
@@ -145,9 +149,10 @@ export class PortError extends Error {
   /**
    * - `"timeout"`: nobody answered in time
    * - `"unanswered"`: there is nobody who could answer
+   * - `"disconnected"`: the other side went away
    * - `"closed"`: the port closed first
    */
-  code: "timeout" | "unanswered" | "closed";
+  code: "timeout" | "unanswered" | "disconnected" | "closed";
 
   constructor(code: PortError["code"], message: string) {
     super(`공항: ${message}`);
@@ -178,6 +183,7 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
   const waiting = new Map<string, Waiting>(); // ask id → the promise we owe
   const seen = new Set<string>(); // ids of frames already handled, so echoes and loops die here
   const onces = new Set<() => void>(); // how to fail each once() still waiting, should the port close
+  const lost = new Set<Adapter>(); // adapters whose other side has left for good
   let count = 0;
   let closed = false;
 
@@ -203,8 +209,9 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     if (seen.size > 5000) seen.delete(seen.values().next().value as string); // forget the oldest
   };
 
-  /** Push a frame through one adapter. */
+  /** Push a frame through one adapter, unless nobody is left on the other side of it. */
   const push = (link: Adapter, f: Frame) => {
+    if (lost.has(link)) return;
     try {
       link.send(f);
     } catch (error) {
@@ -270,7 +277,20 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     if (options.relay) out(f, link);
   };
 
-  const stops = links.map((link) => link.listen(receive(link)));
+  /** An adapter says its other side has left. Once they all have, nothing can answer what we asked through them. */
+  const lose = (link: Adapter) => () => {
+    if (closed || lost.has(link)) return;
+    lost.add(link);
+    if (links.some((other) => !lost.has(other))) return; // an answer could still come another way
+    for (const [id, ask] of waiting) {
+      if (!ask.away) continue; // this port is answering it itself
+      waiting.delete(id);
+      clearTimeout(ask.timer);
+      ask.reject(new PortError("disconnected", "the other side went away before an answer came"));
+    }
+  };
+
+  const stops = links.map((link) => link.listen(receive(link), lose(link)));
 
   const port = {
     send(name: string, data?: unknown) {
@@ -305,6 +325,9 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
         if (closed) return reject(new PortError("closed", `asked "${name}" on a closed port`));
         const local = answerers.get(name);
         if (!local && !links.length) return reject(new PortError("unanswered", `nobody answers "${name}"`));
+        if (!local && links.every((link) => lost.has(link))) {
+          return reject(new PortError("disconnected", `asked "${name}" after the other side went away`));
+        }
 
         const question = frame("ask", name, { data: input });
         const timer =
@@ -314,7 +337,7 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
                 reject(new PortError("timeout", `no answer to "${name}" after ${timeout}ms`));
               }, timeout)
             : undefined;
-        waiting.set(question.id, { resolve, reject, timer });
+        waiting.set(question.id, { resolve, reject, timer, away: !local });
 
         if (local) void reply(question, local);
         else out(question);
@@ -358,6 +381,8 @@ interface Waiting {
   resolve: (data: unknown) => void;
   reject: (error: Error) => void;
   timer: ReturnType<typeof setTimeout> | undefined;
+  /** Whether the question went out through the adapters, rather than to an answerer on this port. */
+  away: boolean;
 }
 
 /** Take a frame, or the JSON text of one. Anything else isn't ours. */
@@ -446,15 +471,25 @@ export function worker(target: Postable): Adapter {
     send(frame) {
       target.postMessage(frame);
     },
-    listen(receive) {
+    listen(receive, gone) {
       if (target.addEventListener) {
         const onMessage = (event: { data: unknown }) => receive(event.data);
         target.addEventListener("message", onMessage);
+        target.addEventListener("close", gone); // a MessagePort or a bun Worker; in browsers and deno a Worker never says
         target.start?.(); // a MessagePort stays quiet until started
-        return () => target.removeEventListener?.("message", onMessage);
+        return () => {
+          target.removeEventListener?.("message", onMessage);
+          target.removeEventListener?.("close", gone);
+        };
       }
       target.on?.("message", receive);
-      return () => target.off?.("message", receive);
+      target.on?.("exit", gone); // a Worker from node's worker_threads
+      target.on?.("close", gone);
+      return () => {
+        target.off?.("message", receive);
+        target.off?.("exit", gone);
+        target.off?.("close", gone);
+      };
     },
   };
 }
@@ -500,16 +535,19 @@ export function websocket(socket: Socket): Adapter {
       if (socket.readyState === 0) early.push(text);
       else socket.send(text);
     },
-    listen(receive) {
+    listen(receive, gone) {
       const onOpen = () => {
         for (const text of early.splice(0)) socket.send(text);
       };
       const onMessage = (event: { data: unknown }) => receive(event.data);
       socket.addEventListener("open", onOpen);
       socket.addEventListener("message", onMessage);
+      socket.addEventListener("close", gone);
+      if (socket.readyState === 3) gone(); // it had already closed when we got it
       return () => {
         socket.removeEventListener("open", onOpen);
         socket.removeEventListener("message", onMessage);
+        socket.removeEventListener("close", gone);
       };
     },
   };
@@ -517,7 +555,7 @@ export function websocket(socket: Socket): Adapter {
 
 /** Something to read text from: a node stream, or a web ReadableStream. */
 export type Readable =
-  | { on(event: "data", listener: (chunk: any) => void): unknown; off(event: "data", listener: (chunk: any) => void): unknown }
+  | { on(event: any, listener: (chunk: any) => void): unknown; off(event: any, listener: (chunk: any) => void): unknown }
   | { getReader(): { read(): Promise<{ done: boolean; value?: any }>; releaseLock(): void } };
 
 /** Something to write text to: a node stream, a bun FileSink, or a web WritableStream. */
@@ -546,7 +584,7 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
         if (typeof output.flush === "function") output.flush(); // a bun FileSink holds text until flushed
       }
     },
-    listen(receive) {
+    listen(receive, gone) {
       const decoder = new TextDecoder();
       let rest = "";
       const feed = (chunk: string | Uint8Array) => {
@@ -565,7 +603,9 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
             if (done) break;
             feed(value);
           }
-        })().catch(() => {});
+        })()
+          .catch(() => {}) // a stream that breaks has ended just the same
+          .then(() => reading && gone());
         return () => {
           reading = false;
           try {
@@ -575,7 +615,13 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
       }
 
       input.on("data", feed);
-      return () => input.off("data", feed);
+      input.on("end", gone);
+      input.on("close", gone);
+      return () => {
+        input.off("data", feed);
+        input.off("end", gone);
+        input.off("close", gone);
+      };
     },
   };
 }
