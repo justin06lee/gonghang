@@ -3,7 +3,7 @@ import { fork, spawn, type ChildProcess } from "node:child_process";
 import { createServer, connect as dial, type Socket as TcpSocket } from "node:net";
 import { fileURLToPath } from "node:url";
 import { Worker as Thread } from "node:worker_threads";
-import { broadcast, connect, custom, lines, memory, websocket, worker, type Adapter, type Frame, type Port } from "../src/index.ts";
+import { broadcast, connect, custom, lines, memory, websocket, worker, type Adapter, type Frame, type Port, type PortError } from "../src/index.ts";
 import type { App } from "./contract.ts";
 
 const fixture = (name: string) => new URL(`./fixtures/${name}`, import.meta.url);
@@ -137,8 +137,8 @@ describe("lines", () => {
   test("frames split across chunks, and several in one chunk", () => {
     const listeners = new Set<(chunk: Uint8Array) => void>();
     const stream = {
-      on: (_: "data", listener: (chunk: Uint8Array) => void) => listeners.add(listener),
-      off: (_: "data", listener: (chunk: Uint8Array) => void) => listeners.delete(listener),
+      on: (event: string, listener: (chunk: Uint8Array) => void) => event === "data" && listeners.add(listener),
+      off: (_: string, listener: (chunk: Uint8Array) => void) => listeners.delete(listener),
       write: () => {},
     };
     const port = connect<App>(lines(stream));
@@ -164,8 +164,9 @@ describe("your own", () => {
   // The adapter from the README: node's process IPC, in two functions.
   const ipc = (child: ChildProcess): Adapter => ({
     send: (frame) => child.send(frame),
-    listen: (receive) => {
+    listen: (receive, gone) => {
       child.on("message", receive);
+      child.on("exit", gone);
       return () => child.off("message", receive);
     },
   });
@@ -178,11 +179,23 @@ describe("your own", () => {
     await converse(port);
   });
 
+  test("and it can say when the other side has gone", async () => {
+    const child = fork(script("forked.ts"));
+    const port = connect<App>(ipc(child));
+    cleanup.push(() => port.close(), () => child.kill());
+    await converse(port);
+
+    const stranded = port.ask("now", undefined, { timeout: 0 }).catch((error: PortError) => error.code);
+    child.kill();
+
+    expect(await stranded).toBe("disconnected");
+  });
+
   test("wrapping an adapter adds behaviour the ports never see", async () => {
     const looksRight = (frame: unknown) => (frame as Frame).name !== "tick";
     const validated = (inner: Adapter): Adapter => ({
       send: inner.send,
-      listen: (receive) => inner.listen((frame) => looksRight(frame) && receive(frame)),
+      listen: (receive, gone) => inner.listen((frame) => looksRight(frame) && receive(frame), gone),
     });
 
     const hub = memory();
@@ -197,5 +210,108 @@ describe("your own", () => {
     there.send("note", "let through");
 
     expect(heard).toEqual(["let through"]);
+  });
+});
+
+describe("when the other side goes away", () => {
+  /** An ask nobody answers and no timeout ends: only the adapter noticing can settle it. */
+  const stranded = (port: Port<App>) => port.ask("now", undefined, { timeout: 0 }).catch((error: PortError) => error.code);
+
+  test("a worker that is terminated", async () => {
+    const thread = new Worker(fixture("worker.ts"));
+    const port = connect<App>(worker(thread));
+    cleanup.push(() => port.close(), () => thread.terminate());
+    await converse(port);
+
+    const waiting = stranded(port);
+    thread.terminate();
+
+    expect(await waiting).toBe("disconnected");
+    expect(await stranded(port)).toBe("disconnected"); // and from now on, straight away
+  });
+
+  test("a node worker thread that exits", async () => {
+    const thread = new Thread(fixture("thread.ts"));
+    const port = connect<App>(worker(thread));
+    cleanup.push(() => port.close(), () => thread.terminate());
+    await converse(port);
+
+    const waiting = stranded(port);
+    await thread.terminate();
+
+    expect(await waiting).toBe("disconnected");
+  });
+
+  test("a MessageChannel closed at the far end", async () => {
+    const { port1, port2 } = new MessageChannel();
+    const here = connect<App>(worker(port1));
+    const there = connect<App>(worker(port2));
+    cleanup.push(() => here.close(), () => there.close(), () => port1.close(), () => port2.close());
+
+    const waiting = stranded(here);
+    port2.close();
+
+    expect(await waiting).toBe("disconnected");
+  });
+
+  test("a websocket the server hangs up on", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(request, server) {
+        return server.upgrade(request, { data: undefined }) ? undefined : new Response("not a socket", { status: 400 });
+      },
+      websocket: { message: (ws) => void ws.close() },
+    });
+    const socket = new WebSocket(`ws://localhost:${server.port}`);
+    const port = connect<App>(websocket(socket));
+    cleanup.push(() => port.close(), () => socket.close(), () => server.stop(true));
+
+    expect(await stranded(port)).toBe("disconnected");
+  });
+
+  test("a websocket that never connects", async () => {
+    const server = Bun.serve({ port: 0, fetch: () => new Response("only here to find a free port") });
+    const free = server.port;
+    await server.stop(true);
+    const socket = new WebSocket(`ws://localhost:${free}`);
+    const port = connect<App>(websocket(socket));
+    cleanup.push(() => port.close(), () => socket.close());
+
+    expect(await stranded(port)).toBe("disconnected");
+  });
+
+  test("a child process that dies, over bun's web streams", async () => {
+    const child = Bun.spawn(["bun", script("child.ts")], { stdin: "pipe", stdout: "pipe", stderr: "inherit" });
+    const port = connect<App>(lines(child.stdout, child.stdin));
+    cleanup.push(() => port.close(), () => child.kill());
+    await converse(port);
+
+    const waiting = stranded(port);
+    child.kill();
+
+    expect(await waiting).toBe("disconnected");
+  });
+
+  test("a child process that dies, over node streams", async () => {
+    const child = spawn("bun", [script("child.ts")], { stdio: ["pipe", "pipe", "inherit"] });
+    const port = connect<App>(lines(child.stdout, child.stdin));
+    cleanup.push(() => port.close(), () => child.kill());
+    await converse(port);
+
+    const waiting = stranded(port);
+    child.kill();
+
+    expect(await waiting).toBe("disconnected");
+  });
+
+  test("a TCP socket the server drops", async () => {
+    const server = createServer((socket) => socket.once("data", () => socket.destroy()));
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const { port: tcpPort } = server.address() as { port: number };
+    const socket: TcpSocket = dial(tcpPort);
+    const port = connect<App>(lines(socket));
+    cleanup.push(() => port.close(), () => socket.destroy(), () => server.close());
+
+    expect(await stranded(port)).toBe("disconnected");
   });
 });

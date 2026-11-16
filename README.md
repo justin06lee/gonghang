@@ -183,21 +183,22 @@ import type { Adapter } from "@justin06lee/gonghang";
 
 const ipc = (child: ChildProcess): Adapter => ({
   send: (frame) => child.send(frame),
-  listen: (receive) => {
+  listen: (receive, gone) => {
     child.on("message", receive);
+    child.on("exit", gone); // optional: say when the other side has left for good
     return () => child.off("message", receive); // optional: how to stop
   },
 });
 ```
 
-`receive` takes a frame or the JSON text of one and ignores everything else, so pass it whatever arrives without checking first.
+`receive` takes a frame or the JSON text of one and ignores everything else, so pass it whatever arrives without checking first. Call `gone` if you can tell that the other side has left for good, and asks waiting on it fail at once instead of timing out.
 
 That is also where anything fancier goes. Compression, encryption, batching, reconnecting, validating what comes in: wrap an adapter in another adapter and the ports never know.
 
 ```ts
 const validated = (inner: Adapter): Adapter => ({
   send: inner.send,
-  listen: (receive) => inner.listen((frame) => looksRight(frame) && receive(frame)),
+  listen: (receive, gone) => inner.listen((frame) => looksRight(frame) && receive(frame), gone),
 });
 ```
 
@@ -246,9 +247,12 @@ It rejects, in one of two ways. If the answerer threw, you get an `Error` with t
 |---|---|
 | `"timeout"` | Nobody answered in time. |
 | `"unanswered"` | The port has no adapters and no answerer, so nobody could. |
+| `"disconnected"` | The other side went away: its socket closed, its process exited. |
 | `"closed"` | The port closed first. |
 
 A `once` still waiting when its port closes rejects with the same `"closed"` error.
+
+`"disconnected"` comes from the adapter noticing, so the ask does not have to wait out its timeout. `websocket` notices when the socket closes, `lines` when the stream it reads from ends, and `worker` when a MessagePort closes or a bun or node worker exits. Browsers and deno never say that a `Worker` has died, `memory` and `broadcast` have no single other side to lose, and with `custom` you close the port yourself when the connection ends, as the server above does. A port holding several adapters fails its asks once all of them are gone. It is only told about its own adapters, so an ask that crossed a relay to a port that then died still ends at its timeout.
 
 ## Other languages
 

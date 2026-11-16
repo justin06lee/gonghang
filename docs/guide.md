@@ -121,6 +121,7 @@ A message is the same thing with `"kind":"send"` and no reply. That is everythin
 | The handler threw | An `Error` with the same `name`, `message`, `code` and stack. The class does not cross, so check `error.name`, not `instanceof`. |
 | Nobody answered in time | A `PortError` with code `"timeout"`. |
 | The port has no adapters and no answerer | A `PortError` with code `"unanswered"`, straight away. |
+| The other side went away | A `PortError` with code `"disconnected"`, as soon as the adapter notices. |
 | The port closed first | A `PortError` with code `"closed"`. |
 
 A `once` still waiting when its port closes rejects with the same `"closed"` error.
@@ -158,14 +159,15 @@ import type { Adapter } from "@justin06lee/gonghang";
 
 const ipc = (child: ChildProcess): Adapter => ({
   send: (frame) => child.send(frame),
-  listen: (receive) => {
+  listen: (receive, gone) => {
     child.on("message", receive);
+    child.on("exit", gone); // optional: say when the other side has left for good
     return () => child.off("message", receive); // optional: how to stop
   },
 });
 ```
 
-`receive` takes a frame or the JSON text of one and ignores everything else, so pass it whatever arrives without checking first.
+`receive` takes a frame or the JSON text of one and ignores everything else, so pass it whatever arrives without checking first. Call `gone` if you can tell that the other side has left for good, and asks waiting on it fail at once instead of timing out.
 
 ## Shapes you can build
 
@@ -221,7 +223,7 @@ Every frame that comes in through an adapter takes the same path:
 공항 is small on purpose. These are the things it does not do, so you know to handle them where they matter:
 
 - **Nothing is stored.** A message reaches the ports listening at that moment. A port that connects later never sees it.
-- **A port cannot tell that its link died.** If the other side is gone, an ask fails only when its timeout runs out, and never if the timeout is `0`. A `once()` has no timeout at all: it waits for as long as its port stays open.
+- **A dead link is noticed only where the transport says so.** `websocket`, `lines`, MessagePorts and bun or node workers report it, and the asks waiting on them fail at once with `"disconnected"`. Browsers and deno give no sign that a `Worker` has died, and a port is never told about what lies beyond a relay. There an ask still ends at its timeout, and never if the timeout is `0`. A `once()` has no timeout at all: it waits for as long as its port stays open.
 - **No reconnecting.** An adapter wraps a connection you made. If it drops, making a new one is up to you.
 - **No authentication.** A port trusts its adapters: whatever arrives is treated as coming from a peer. On a public socket, check inside your handlers who is asking and what they sent.
 
@@ -243,11 +245,13 @@ Extra behaviour such as compression, encryption, validation or reconnecting belo
 
 1. **The contract types.** `MessageName`, `QuestionName`, `Input` and `Output` work out from your contract which names are messages, which are questions, and what each takes and returns.
 2. **The pieces.** The `Frame`, `Adapter`, `Options` and `Port` interfaces, and `PortError`.
-3. **`connect()`.** The one function with real logic in it. A port is four small tables and the functions that use them:
+3. **`connect()`.** The one function with real logic in it. A port is a few small tables and the functions that use them:
    - `listeners`: message name → the `on` handlers for it
    - `answerers`: question name → the one `answer` handler for it
    - `waiting`: ask id → the promise still owed an answer, and its timer
+   - `onces`: how to fail each `once` still waiting, if the port closes
    - `seen`: the ids of frames already handled
+   - `lost`: the adapters whose other side has left for good
 4. **The adapters.** `memory`, `worker`, `broadcast`, `websocket`, `lines` and `custom`. Each is a few lines that turn one kind of transport into `send` and `listen`.
 
 ## Try it
