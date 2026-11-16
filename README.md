@@ -279,9 +279,9 @@ bun examples/websocket/server.ts   # a server, then examples/websocket/client.ts
 ## Development
 
 ```sh
-make   # install, typecheck, test, build
+make   # install, typecheck, test, build, then run the build on bun, node and deno
 ```
 
-The tests drive every adapter over the real thing: web workers, node worker threads, a MessageChannel, a BroadcastChannel, a WebSocket server, child processes, process IPC and a TCP socket. `test/types.ts` is the type-level half: it only has to compile.
+The tests drive every adapter over the real thing: web workers, node worker threads, a MessageChannel, a BroadcastChannel, a WebSocket server, child processes, process IPC and a TCP socket. `test/types.ts` is the type-level half: it only has to compile. `test/smoke.mjs` is the short proof that the built file works beyond bun: `make` runs it on node and deno too, wherever they are installed.
 
 MIT licensed.

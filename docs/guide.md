@@ -238,8 +238,9 @@ Extra behaviour such as compression, encryption, validation or reconnecting belo
 | [`test/adapters.test.ts`](../test/adapters.test.ts) | Every adapter over the real thing: workers, a WebSocket server, child processes, TCP. |
 | [`test/types.ts`](../test/types.ts) | The type-level tests. It is never run; it only has to compile. |
 | `test/contract.ts`, `test/fixtures/` | The contract the tests share, and the small programs on the far end of each transport. |
+| [`test/smoke.mjs`](../test/smoke.mjs) | A short run of the built file, on bun and on node and deno where they are installed. |
 | [`examples/`](../examples) | One small "kitchen" program, run over a worker, a child process and a WebSocket. |
-| `Makefile` | `make` installs, typechecks, tests and builds. |
+| `Makefile` | `make` installs, typechecks, tests, builds, and runs the smoke test. |
 
 `src/index.ts` reads top to bottom in four parts:
 
@@ -256,10 +257,10 @@ Extra behaviour such as compression, encryption, validation or reconnecting belo
 
 ## Try it
 
-You need [Bun](https://bun.sh).
+You need [Bun](https://bun.sh). If node or deno are installed too, `make` also runs the built file on them.
 
 ```sh
-make                               # install, typecheck, test, build
+make                               # install, typecheck, test, build, smoke test
 bun test                           # just the tests
 
 bun examples/worker/main.ts        # a worker thread

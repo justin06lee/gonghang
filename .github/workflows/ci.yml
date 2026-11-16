@@ -1,0 +1,20 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  make:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - uses: denoland/setup-deno@v2
+      # The same golden path as a fresh clone: install, typecheck, test, build,
+      # then run the built file on bun, node and deno.
+      - run: make
