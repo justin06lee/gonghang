@@ -495,6 +495,21 @@ describe("an adapter whose other side has gone", () => {
     expect((await pending)?.code).toBe("disconnected");
   });
 
+  test("an ask made as the last adapter goes is told, not left waiting", async () => {
+    const only = link();
+    let leaveOnAsk = false;
+    const port = connect<App>(only.adapter, {
+      timeout: 0,
+      tap: (frame) => {
+        if (leaveOnAsk && frame.kind === "ask") only.leave(); // the other side goes between the ask being made and sent
+      },
+    });
+    leaveOnAsk = true;
+
+    expect((await failure(port.ask("now")))?.code).toBe("disconnected");
+    expect(only.sent).toHaveLength(0);
+  });
+
   test("what the port answers itself is untouched", async () => {
     const only = link();
     const port = connect<App>(only.adapter);

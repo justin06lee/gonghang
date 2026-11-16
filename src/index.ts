@@ -368,9 +368,9 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
         let taken = 0;
         for (const link of links) if (push(link, question, (error) => refused.push(error))) taken++;
         if (taken) return refused.forEach(onError);
-        if (!refused.length || !waiting.delete(question.id)) return; // the other side left as we asked, and the ask has been told
+        if (!waiting.delete(question.id)) return; // the other side left as we asked, and the ask has been told
         clearTimeout(timer);
-        reject(refused[0]);
+        reject(refused.length ? refused[0] : new PortError("disconnected", `asked "${name}" as the other side went away`));
       });
     },
 
