@@ -232,6 +232,7 @@ One ask can have its own patience: `port.ask("sum", input, { timeout: 500 })`.
 
 - **A port hears its own messages.** `send` reaches the handlers on the same port too, like any event emitter.
 - **In one process, delivery is immediate.** Handlers run before `send` returns. Across an adapter, they run when the frame gets there.
+- **A question takes one input.** For several values, make the input an object, like `sum` above. A contract that gives a question two parameters is a type error wherever that question is used.
 - **One answerer per question per port.** A second `answer` for the same name throws. Across ports, the first answer to arrive wins and the rest are dropped.
 - **Data has to survive the trip.** JSON for `websocket` and `lines`, a structured clone for `worker` and `broadcast`. With no adapter or `memory()`, handlers get the very same object, so don't mutate it.
 - **A port trusts its adapters.** Whatever arrives on one is treated as coming from a peer. On a public socket, check inside your handlers who is asking and what they sent.

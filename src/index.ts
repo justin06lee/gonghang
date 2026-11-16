@@ -33,7 +33,16 @@ export type MessageName<C> = { [K in keyof C & string]-?: C[K] extends Fn ? neve
 export type QuestionName<C> = { [K in keyof C & string]-?: C[K] extends Fn ? K : never }[keyof C & string];
 
 /** What you hand over when you ask a question: its one parameter. */
-export type Input<Q> = IsAny<Q> extends true ? any : Q extends (...args: infer A) => any ? A[0] : never;
+export type Input<Q> = IsAny<Q> extends true
+  ? any
+  : Q extends (...args: infer A) => any
+    ? A extends [] | [unknown?]
+      ? A[0]
+      : OneInput
+    : never;
+
+/** What an input becomes when the contract gives a question several parameters, so the mistake shows up wherever it is used. */
+type OneInput = "공항: a question takes one input, so put several values in one object";
 
 /** What comes back from a question: its return type, promises unwrapped. */
 export type Output<Q> = IsAny<Q> extends true ? any : Q extends (...args: any[]) => infer R ? Awaited<R> : never;
