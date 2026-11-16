@@ -5,8 +5,9 @@
 all: deps check test build smoke
 	@echo "✓ 공항: typecheck, tests, build and smoke test all green"
 
+# In CI the lockfile is the law: a dependency that has drifted from it fails the build.
 deps:
-	@bun install
+	@bun install $(if $(CI),--frozen-lockfile)
 
 check:
 	@bun run typecheck
