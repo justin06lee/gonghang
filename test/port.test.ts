@@ -117,6 +117,34 @@ describe("one port", () => {
     expect(errors.map((error) => (error as Error).message)).toEqual(["sync", "async"]);
   });
 
+  test("an answerer may throw anything at all, and the asker still hears at once", async () => {
+    const hub = memory();
+    const a = connect<App>(hub);
+    const b = connect<App>(hub);
+    b.answer("fail", () => {
+      throw Object.create(null); // String() itself throws on this
+    });
+    b.answer("now", () => {
+      throw "just a string";
+    });
+
+    const odd = await failure(a.ask("fail", "odd"));
+    expect(odd).toBeInstanceOf(Error);
+    expect(odd).not.toBeInstanceOf(PortError);
+    expect((await failure(a.ask("now")))?.message).toBe("just a string");
+  });
+
+  test("a handler's promise need not be a Promise for its failure to reach onError", async () => {
+    const errors: unknown[] = [];
+    const port = connect<App>([], { onError: (error) => errors.push(error) });
+    port.on("tick", () => ({ then: (_: unknown, reject: (error: Error) => void) => reject(new Error("thenable")) }) as never);
+
+    port.send("tick");
+    await wait(0);
+
+    expect(errors.map((error) => (error as Error).message)).toEqual(["thenable"]);
+  });
+
   test("without a contract, anything goes", async () => {
     const port = connect();
     port.answer("double", (n) => n * 2);
@@ -205,6 +233,21 @@ describe("ports on one hub", () => {
       return text.toUpperCase();
     });
     expect(await a.ask("shout", "patience")).toBe("PATIENCE");
+  });
+
+  test("a timeout too long for a timer waits, instead of failing at once", async () => {
+    const hub = memory();
+    const a = connect<App>(hub);
+    connect<App>(hub);
+    const month = 30 * 24 * 60 * 60 * 1000;
+    let settled = false;
+    const pending = a.ask("now", undefined, { timeout: month }).finally(() => (settled = true));
+
+    await wait(20);
+    expect(settled).toBe(false);
+
+    a.close();
+    expect((await failure(pending))?.code).toBe("closed");
   });
 
   test("the first answer wins when two ports answer", async () => {
@@ -450,6 +493,21 @@ describe("an adapter whose other side has gone", () => {
 
     second.leave();
     expect((await pending)?.code).toBe("disconnected");
+  });
+
+  test("an ask made as the last adapter goes is told, not left waiting", async () => {
+    const only = link();
+    let leaveOnAsk = false;
+    const port = connect<App>(only.adapter, {
+      timeout: 0,
+      tap: (frame) => {
+        if (leaveOnAsk && frame.kind === "ask") only.leave(); // the other side goes between the ask being made and sent
+      },
+    });
+    leaveOnAsk = true;
+
+    expect((await failure(port.ask("now")))?.code).toBe("disconnected");
+    expect(only.sent).toHaveLength(0);
   });
 
   test("what the port answers itself is untouched", async () => {

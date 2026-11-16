@@ -5,6 +5,10 @@ on:
     branches: [master]
   pull_request:
 
+# The job only reads the repo, so that is all its token may do.
+permissions:
+  contents: read
+
 jobs:
   make:
     runs-on: ubuntu-latest

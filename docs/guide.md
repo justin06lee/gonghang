@@ -213,7 +213,7 @@ Every frame that comes in through an adapter takes the same path:
 |---|---|---|
 | `channel` | `"main"` | Ports only hear ports on the same channel. |
 | `name` | random | Stamped on every frame as `from`. |
-| `timeout` | `5000` | How long `ask` waits, in milliseconds. `0` waits forever. One ask can set its own: `port.ask(name, input, { timeout: 500 })`. |
+| `timeout` | `5000` | How long `ask` waits, in milliseconds. `0` waits forever, and so does anything over about 24 days. One ask can set its own: `port.ask(name, input, { timeout: 500 })`. |
 | `relay` | `false` | Pass frames between this port's adapters. |
 | `stacks` | `true` | Send stack traces along with errors. Turn it off on a server whose clients are strangers. |
 | `tap` | none | A function that sees every frame going in or out. Good for logging. |
@@ -227,7 +227,7 @@ Every frame that comes in through an adapter takes the same path:
 - **Nothing is stored.** A message reaches the ports listening at that moment. A port that connects later never sees it.
 - **A dead link is noticed only where the transport says so.** `websocket`, `lines`, MessagePorts and bun or node workers report it, and the asks waiting on them fail at once with `"disconnected"`. Browsers and deno give no sign that a `Worker` has died, and a port is never told about what lies beyond a relay. There an ask still ends at its timeout, and never if the timeout is `0`. A `once()` has no timeout at all: it waits for as long as its port stays open.
 - **No reconnecting.** An adapter wraps a connection you made. If it drops, making a new one is up to you.
-- **No authentication.** A port trusts its adapters: whatever arrives is treated as coming from a peer. On a public socket, check inside your handlers who is asking and what they sent.
+- **No authentication.** A port trusts its adapters: whatever arrives is treated as coming from a peer, and a frame's `from` and `channel` are labels its sender chose, not credentials. On a public socket, give every connection its own port, so that the connection is what tells you who is asking, and check in your handlers what they sent.
 
 Extra behaviour such as compression, encryption, validation or reconnecting belongs in an adapter that wraps another adapter. The ports never know it is there.
 

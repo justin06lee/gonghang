@@ -103,7 +103,10 @@ export interface Options {
   channel?: string;
   /** This port's name, stamped on every frame as `from`. Default: a random one. */
   name?: string;
-  /** How long `ask` waits for an answer, in milliseconds. `0` waits forever. Default `5000`. */
+  /**
+   * How long `ask` waits for an answer, in milliseconds. `0` waits forever, and
+   * so does anything over about 24 days, the longest a timer can run. Default `5000`.
+   */
   timeout?: number;
   /** Pass frames along from one adapter to the others, which makes this port a hub. Default `false`. */
   relay?: boolean;
@@ -235,8 +238,8 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
   const hear = (f: Frame) => {
     for (const listener of [...(listeners.get(f.name) ?? [])]) {
       try {
-        const result = listener(f.data, f);
-        if (result instanceof Promise) result.catch(onError);
+        const result = listener(f.data, f) as { then?: unknown } | undefined;
+        if (typeof result?.then === "function") Promise.resolve(result).catch(onError);
       } catch (error) {
         onError(error);
       }
@@ -286,7 +289,7 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     if (f.kind === "send") hear(f);
     else if (f.kind === "ask") {
       const handler = answerers.get(f.name);
-      if (handler) return void reply(f, handler, link); // ours to answer, so it stops here
+      if (handler) return void reply(f, handler, link).catch(onError); // ours to answer, so it stops here
     } else if (settle(f)) return; // the answer to our own ask, so it stops here
 
     if (options.relay) out(f, link);
@@ -351,23 +354,23 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
 
         const question = frame("ask", name, { data: input });
         const timer =
-          timeout > 0 && timeout < Infinity
+          timeout > 0 && timeout <= LONGEST_TIMER
             ? setTimeout(() => {
                 waiting.delete(question.id);
                 reject(new PortError("timeout", `no answer to "${name}" after ${timeout}ms`));
               }, timeout)
             : undefined;
         waiting.set(question.id, { resolve, reject, timer, away: !local });
-        if (local) return void reply(question, local);
+        if (local) return void reply(question, local).catch(onError);
 
         // A question no adapter would take can never be answered: fail now, with the reason.
         const refused: unknown[] = [];
         let taken = 0;
         for (const link of links) if (push(link, question, (error) => refused.push(error))) taken++;
         if (taken) return refused.forEach(onError);
-        if (!refused.length || !waiting.delete(question.id)) return; // the other side left as we asked, and the ask has been told
+        if (!waiting.delete(question.id)) return; // the other side left as we asked, and the ask has been told
         clearTimeout(timer);
-        reject(refused[0]);
+        reject(refused.length ? refused[0] : new PortError("disconnected", `asked "${name}" as the other side went away`));
       });
     },
 
@@ -404,6 +407,9 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
   return port as Port<C>;
 }
 
+/** The longest a timer can run. Given more, it fires at once instead, which would fail an ask the moment it was made. */
+const LONGEST_TIMER = 2 ** 31 - 1;
+
 interface Waiting {
   resolve: (data: unknown) => void;
   reject: (error: Error) => void;
@@ -434,7 +440,7 @@ function read(raw: unknown): Frame | undefined {
 
 /** Turn whatever a handler threw into plain data that can travel. */
 function describe(error: unknown, withStack: boolean): NonNullable<Frame["error"]> {
-  if (!(error instanceof Error)) return { name: "Error", message: String(error) };
+  if (!(error instanceof Error)) return { name: "Error", message: text(error) };
   const code = (error as { code?: unknown }).code;
   return {
     name: error.name,
@@ -442,6 +448,15 @@ function describe(error: unknown, withStack: boolean): NonNullable<Frame["error"
     ...(withStack && error.stack ? { stack: error.stack } : {}),
     ...(typeof code === "string" || typeof code === "number" ? { code } : {}),
   };
+}
+
+/** `String(value)`, for the values that refuse: an object with no prototype, say. */
+function text(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return Object.prototype.toString.call(value);
+  }
 }
 
 /** Turn it back into an Error on the asking side. */
@@ -567,14 +582,18 @@ export function websocket(socket: Socket): Adapter {
         for (const text of early.splice(0)) socket.send(text);
       };
       const onMessage = (event: { data: unknown }) => receive(event.data);
+      const onClose = () => {
+        early.length = 0; // nothing will open now to send them
+        gone();
+      };
       socket.addEventListener("open", onOpen);
       socket.addEventListener("message", onMessage);
-      socket.addEventListener("close", gone);
-      if (socket.readyState === 3) gone(); // it had already closed when we got it
+      socket.addEventListener("close", onClose);
+      if (socket.readyState === 3) onClose(); // it had already closed when we got it
       return () => {
         socket.removeEventListener("open", onOpen);
         socket.removeEventListener("message", onMessage);
-        socket.removeEventListener("close", gone);
+        socket.removeEventListener("close", onClose);
       };
     },
   };
@@ -603,8 +622,15 @@ export type Writable =
  *   const port = connect<App>(lines(child.stdout, child.stdin));      // parent
  *   const port = connect<App>(lines(process.stdin, process.stdout));  // child
  *   const port = connect<App>(lines(socket));                         // both ways on one
+ *
+ * A line longer than `limit` characters is skipped as well, so a peer that
+ * never ends its line cannot fill your memory. Default: 64 million.
  */
-export function lines(input: Readable, output: Writable = input as unknown as Writable): Adapter {
+export function lines(
+  input: Readable,
+  output: Writable = input as unknown as Writable,
+  { limit = 64 * 1024 * 1024 }: { limit?: number } = {},
+): Adapter {
   const writer = "getWriter" in output ? output.getWriter() : undefined;
   const encoder = new TextEncoder();
   return {
@@ -618,12 +644,28 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
     },
     listen(receive, gone) {
       const decoder = new TextDecoder();
-      let rest = "";
+      let rest = ""; // the line still arriving
+      let outgrown = false; // it passed the limit, so what is left of it is dropped as it comes
+
+      /** The line still arriving is complete: hand it over, unless it is blank or outgrew the limit. */
+      const end = () => {
+        if (!outgrown && /\S/.test(rest)) receive(rest);
+        rest = "";
+        outgrown = false;
+      };
+
+      // Only the new text is searched for line ends, so a long line costs no more per chunk than a short one.
       const feed = (chunk: string | Uint8Array) => {
-        rest += typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
-        const found = rest.split("\n");
-        rest = found.pop() ?? "";
-        for (const line of found) if (line.trim()) receive(line);
+        const parts = (typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true })).split("\n");
+        parts.forEach((part, index) => {
+          if (index) end(); // every "\n" ends the line before it
+          if (outgrown) return;
+          rest += part;
+          if (rest.length > limit) {
+            rest = "";
+            outgrown = true;
+          }
+        });
       };
 
       if ("getReader" in input) {
@@ -637,7 +679,11 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
           }
         })()
           .catch(() => {}) // a stream that breaks has ended just the same
-          .then(() => reading && gone());
+          .then(() => {
+            if (!reading) return;
+            end(); // a last line with no newline after it still counts
+            gone();
+          });
         return () => {
           reading = false;
           try {
@@ -650,6 +696,7 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
       let over = false;
       const ended = () => {
         over = true;
+        end(); // a last line with no newline after it still counts
         gone();
       };
       const sink = "write" in output && output !== (input as unknown) ? output : undefined;
