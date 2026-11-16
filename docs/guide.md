@@ -213,7 +213,7 @@ Every frame that comes in through an adapter takes the same path:
 |---|---|---|
 | `channel` | `"main"` | Ports only hear ports on the same channel. |
 | `name` | random | Stamped on every frame as `from`. |
-| `timeout` | `5000` | How long `ask` waits, in milliseconds. `0` waits forever. One ask can set its own: `port.ask(name, input, { timeout: 500 })`. |
+| `timeout` | `5000` | How long `ask` waits, in milliseconds. `0` waits forever, and so does anything over about 24 days. One ask can set its own: `port.ask(name, input, { timeout: 500 })`. |
 | `relay` | `false` | Pass frames between this port's adapters. |
 | `stacks` | `true` | Send stack traces along with errors. Turn it off on a server whose clients are strangers. |
 | `tap` | none | A function that sees every frame going in or out. Good for logging. |

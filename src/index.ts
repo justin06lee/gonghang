@@ -103,7 +103,10 @@ export interface Options {
   channel?: string;
   /** This port's name, stamped on every frame as `from`. Default: a random one. */
   name?: string;
-  /** How long `ask` waits for an answer, in milliseconds. `0` waits forever. Default `5000`. */
+  /**
+   * How long `ask` waits for an answer, in milliseconds. `0` waits forever, and
+   * so does anything over about 24 days, the longest a timer can run. Default `5000`.
+   */
   timeout?: number;
   /** Pass frames along from one adapter to the others, which makes this port a hub. Default `false`. */
   relay?: boolean;
@@ -351,7 +354,7 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
 
         const question = frame("ask", name, { data: input });
         const timer =
-          timeout > 0 && timeout < Infinity
+          timeout > 0 && timeout <= LONGEST_TIMER
             ? setTimeout(() => {
                 waiting.delete(question.id);
                 reject(new PortError("timeout", `no answer to "${name}" after ${timeout}ms`));
@@ -403,6 +406,9 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
 
   return port as Port<C>;
 }
+
+/** The longest a timer can run. Given more, it fires at once instead, which would fail an ask the moment it was made. */
+const LONGEST_TIMER = 2 ** 31 - 1;
 
 interface Waiting {
   resolve: (data: unknown) => void;

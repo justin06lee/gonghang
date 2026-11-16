@@ -207,6 +207,21 @@ describe("ports on one hub", () => {
     expect(await a.ask("shout", "patience")).toBe("PATIENCE");
   });
 
+  test("a timeout too long for a timer waits, instead of failing at once", async () => {
+    const hub = memory();
+    const a = connect<App>(hub);
+    connect<App>(hub);
+    const month = 30 * 24 * 60 * 60 * 1000;
+    let settled = false;
+    const pending = a.ask("now", undefined, { timeout: month }).finally(() => (settled = true));
+
+    await wait(20);
+    expect(settled).toBe(false);
+
+    a.close();
+    expect((await failure(pending))?.code).toBe("closed");
+  });
+
   test("the first answer wins when two ports answer", async () => {
     const hub = memory();
     const a = connect<App>(hub);
