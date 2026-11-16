@@ -580,7 +580,12 @@ export type Readable =
 
 /** Something to write text to: a node stream, a bun FileSink, or a web WritableStream. */
 export type Writable =
-  | { write(text: string): unknown; flush?: () => unknown }
+  | {
+      write(text: string): unknown;
+      flush?: () => unknown;
+      on?: (event: any, listener: (error: any) => void) => unknown;
+      off?: (event: any, listener: (error: any) => void) => unknown;
+    }
   | { getWriter(): { write(chunk: Uint8Array): unknown } };
 
 /**
@@ -634,13 +639,22 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
         };
       }
 
+      // A node stream is over when it ends, closes or fails, and a broken pipe shows up on the writing side.
+      let over = false;
+      const ended = () => {
+        over = true;
+        gone();
+      };
+      const sink = "write" in output && output !== (input as unknown) ? output : undefined;
       input.on("data", feed);
-      input.on("end", gone);
-      input.on("close", gone);
+      for (const event of ["end", "close", "error"]) input.on(event, ended);
+      sink?.on?.("error", ended);
       return () => {
         input.off("data", feed);
-        input.off("end", gone);
-        input.off("close", gone);
+        for (const event of ["end", "close"]) input.off(event, ended);
+        if (over) return; // a stream that died can still fail a write made just before, and in node an unheard "error" ends the process
+        input.off("error", ended);
+        sink?.off?.("error", ended);
       };
     },
   };
