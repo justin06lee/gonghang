@@ -85,7 +85,7 @@ const port = connect<App>(worker(self));
 | `port.answer(name, handler)` | Be the one who answers. Return the answer or a promise of it. Returns a function that steps down. |
 | `port.close()` | Stop listening, fail every ask and `once` still waiting, let go of the adapters. |
 
-Handlers also get the raw frame as a second argument, if you want to know who sent something: `port.on("user.joined", (data, frame) => frame.from)`.
+Handlers also get the raw frame as a second argument, if you want to know who sent something: `port.on("user.joined", (data, frame) => frame.from)`. `from` is the name the sender gave itself, so it is good for logs and no proof of who sent it.
 
 ## Adapters
 
@@ -239,7 +239,7 @@ One ask can have its own patience: `port.ask("sum", input, { timeout: 500 })`.
 - **A question takes one input.** For several values, make the input an object, like `sum` above. A contract that gives a question two parameters is a type error wherever that question is used.
 - **One answerer per question per port.** A second `answer` for the same name throws. Across ports, the first answer to arrive wins and the rest are dropped.
 - **Data has to survive the trip.** JSON for `websocket` and `lines`, a structured clone for `worker` and `broadcast`. With no adapter or `memory()`, handlers get the very same object, so don't mutate it.
-- **A port trusts its adapters.** Whatever arrives on one is treated as coming from a peer. On a public socket, check inside your handlers who is asking and what they sent.
+- **A port trusts its adapters.** Whatever arrives on one is treated as coming from a peer, and a frame's `from` and `channel` are labels its sender chose, not credentials. On a public socket, give every connection its own port, so that the connection is what tells you who is asking, and check in your handlers what they sent.
 - **Without a contract, anything goes.** `connect()` with no type allows every name and types everything as `any`.
 
 ## When an ask fails
