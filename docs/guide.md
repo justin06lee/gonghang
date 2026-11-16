@@ -119,6 +119,7 @@ A message is the same thing with `"kind":"send"` and no reply. That is everythin
 | What happened | What the asker gets |
 |---|---|
 | The handler threw | An `Error` with the same `name`, `message`, `code` and stack. The class does not cross, so check `error.name`, not `instanceof`. |
+| The question or its answer could not be sent, because the data does not survive the trip | The error that says why, straight away. |
 | Nobody answered in time | A `PortError` with code `"timeout"`. |
 | The port has no adapters and no answerer | A `PortError` with code `"unanswered"`, straight away. |
 | The other side went away | A `PortError` with code `"disconnected"`, as soon as the adapter notices. |

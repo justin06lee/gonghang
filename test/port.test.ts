@@ -542,3 +542,57 @@ describe("close", () => {
     expect((await pending)?.code).toBe("closed");
   });
 });
+
+describe("what cannot travel", () => {
+  /** Two ports joined by JSON text, the way a socket or a pipe joins them. */
+  const wire = () => {
+    const errors: Error[] = [];
+    const ends: { near?: ReturnType<typeof custom>; far?: ReturnType<typeof custom> } = {};
+    ends.near = custom((frame) => ends.far?.receive(JSON.stringify(frame)));
+    ends.far = custom((frame) => ends.near?.receive(JSON.stringify(frame)));
+    const options = { timeout: 2000, onError: (error: unknown) => void errors.push(error as Error) };
+    return { a: connect(ends.near, options), b: connect(ends.far, options), errors };
+  };
+
+  test("an input that cannot be sent fails the ask at once, with the reason", async () => {
+    const { a, b, errors } = wire();
+    b.answer("echo", (input) => input);
+
+    const started = Date.now();
+    const error = await failure(a.ask("echo", 10n)); // JSON has no BigInt
+
+    expect(error?.name).toBe("TypeError");
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(errors).toHaveLength(0); // the asker was told, so nothing is left for onError
+  });
+
+  test("an answer that cannot be sent fails the ask at once, and the answerer hears why", async () => {
+    const { a, b, errors } = wire();
+    b.answer("big", () => 10n);
+
+    const started = Date.now();
+    const error = await failure(a.ask("big"));
+
+    expect(error?.name).toBe("TypeError");
+    expect(error?.message).toContain('the answer to "big" could not be sent');
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(errors).toHaveLength(1);
+  });
+
+  test("an ask still goes out when only some adapters refuse it", async () => {
+    const errors: Error[] = [];
+    const jammed = {
+      send: () => {
+        throw new Error("jammed");
+      },
+      listen: () => {},
+    };
+    const hub = memory();
+    const a = connect<App>([jammed, hub], { onError: (error) => void errors.push(error as Error) });
+    const b = connect<App>(hub);
+    b.answer("now", () => 7);
+
+    expect(await a.ask("now")).toBe(7);
+    expect(errors.map((error) => error.message)).toEqual(["jammed"]);
+  });
+});

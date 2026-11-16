@@ -241,7 +241,11 @@ One ask can have its own patience: `port.ask("sum", input, { timeout: 500 })`.
 
 ## When an ask fails
 
-It rejects, in one of two ways. If the answerer threw, you get an `Error` with the same `name`, `message` and `code`, and its stack. The error's class does not cross, so check `error.name` rather than `instanceof`. If nobody answered, you get a `PortError`:
+It rejects, in one of three ways. If the answerer threw, you get an `Error` with the same `name`, `message` and `code`, and its stack. The error's class does not cross, so check `error.name` rather than `instanceof`.
+
+If the question or its answer could not be sent at all, because the data does not survive the trip, you get the error that says why, straight away. A `BigInt` over JSON is the usual one.
+
+If nobody answered, you get a `PortError`:
 
 | `error.code` | Meaning |
 |---|---|

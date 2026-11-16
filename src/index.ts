@@ -209,13 +209,18 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     if (seen.size > 5000) seen.delete(seen.values().next().value as string); // forget the oldest
   };
 
-  /** Push a frame through one adapter, unless nobody is left on the other side of it. */
-  const push = (link: Adapter, f: Frame) => {
-    if (lost.has(link)) return;
+  /**
+   * Push a frame through one adapter, unless nobody is left on the other side
+   * of it. Says whether the adapter took it; what it threw goes to `refused`.
+   */
+  const push = (link: Adapter, f: Frame, refused: (error: unknown) => void = onError): boolean => {
+    if (lost.has(link)) return false;
     try {
       link.send(f);
+      return true;
     } catch (error) {
-      onError(error);
+      refused(error);
+      return false;
     }
   };
 
@@ -246,8 +251,16 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     }
     if (closed) return;
     const answer = frame("answer", question.name, { to: question.id, ...result });
-    if (link) push(link, answer); // back the way the question came
-    else settle(answer); // asked on this very port
+    if (!link) return void settle(answer); // asked on this very port
+
+    // Back the way the question came. An answer that can't make the trip must
+    // not leave the asker waiting, so the reason goes back in its place.
+    let why: unknown;
+    if (push(link, answer, (error) => (why = error)) || lost.has(link)) return;
+    onError(why);
+    const { name, message } = describe(why, false);
+    const sorry = { name, message: `the answer to "${question.name}" could not be sent: ${message}` };
+    push(link, frame("answer", question.name, { to: question.id, error: sorry }), () => {});
   };
 
   /** An answer arrived: finish the ask that was waiting for it. */
@@ -338,9 +351,16 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
               }, timeout)
             : undefined;
         waiting.set(question.id, { resolve, reject, timer, away: !local });
+        if (local) return void reply(question, local);
 
-        if (local) void reply(question, local);
-        else out(question);
+        // A question no adapter would take can never be answered: fail now, with the reason.
+        const refused: unknown[] = [];
+        let taken = 0;
+        for (const link of links) if (push(link, question, (error) => refused.push(error))) taken++;
+        if (taken) return refused.forEach(onError);
+        if (!refused.length || !waiting.delete(question.id)) return; // the other side left as we asked, and the ask has been told
+        clearTimeout(timer);
+        reject(refused[0]);
       });
     },
 
