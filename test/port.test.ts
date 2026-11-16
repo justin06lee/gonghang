@@ -419,6 +419,17 @@ describe("close", () => {
     expect((await failure(a.ask("now")))?.code).toBe("closed");
   });
 
+  test("fails a once still waiting", async () => {
+    const port = connect<App>();
+    const pending = failure(port.once("tick"));
+
+    port.close();
+
+    expect(await pending).toBeInstanceOf(PortError);
+    expect((await pending)?.code).toBe("closed");
+    expect((await failure(port.once("tick")))?.code).toBe("closed");
+  });
+
   test("an adapter that fails to stop doesn't stop the rest", async () => {
     const errors: unknown[] = [];
     const stubborn = {

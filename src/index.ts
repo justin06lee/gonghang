@@ -115,7 +115,7 @@ export interface Port<C = Loose> {
   /** Hear a message every time anyone sends it. Call the returned function to stop. */
   on<K extends MessageName<C>>(name: K, handler: (data: C[K], frame: Frame) => void): Stop;
 
-  /** Wait for the next time a message is sent. */
+  /** Wait for the next time a message is sent. Rejects if the port closes first. */
   once<K extends MessageName<C>>(name: K): Promise<C[K]>;
 
   /** Ask a question and wait for whoever answers it. Rejects on a timeout, or with the error the answerer threw. */
@@ -127,11 +127,11 @@ export interface Port<C = Loose> {
     handler: (input: Input<C[K]>, frame: Frame) => Output<C[K]> | Promise<Output<C[K]>>,
   ): Stop;
 
-  /** Stop listening, fail any asks still waiting, and let go of the adapters. */
+  /** Stop listening, fail any ask or once still waiting, and let go of the adapters. */
   close(): void;
 }
 
-/** Why an ask failed without anyone answering it. */
+/** Why an ask failed without anyone answering it, or a once without its message arriving. */
 export class PortError extends Error {
   /**
    * - `"timeout"`: nobody answered in time
@@ -168,6 +168,7 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
   const answerers = new Map<string, (input: any, frame: Frame) => unknown>(); // name → who answers it
   const waiting = new Map<string, Waiting>(); // ask id → the promise we owe
   const seen = new Set<string>(); // ids of frames already handled, so echoes and loops die here
+  const onces = new Set<() => void>(); // how to fail each once() still waiting, should the port close
   let count = 0;
   let closed = false;
 
@@ -278,11 +279,15 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     },
 
     once(name: string) {
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
+        if (closed) return reject(new PortError("closed", `waited for "${name}" on a closed port`));
+        const fail = () => reject(new PortError("closed", `the port closed before "${name}" came`));
         const stop = port.on(name, (data) => {
           stop();
+          onces.delete(fail);
           resolve(data);
         });
+        onces.add(fail);
       });
     },
 
@@ -330,6 +335,8 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
         ask.reject(new PortError("closed", "the port closed before an answer came"));
       }
       waiting.clear();
+      for (const fail of onces) fail();
+      onces.clear();
       listeners.clear();
       answerers.clear();
     },

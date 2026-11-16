@@ -80,10 +80,10 @@ const port = connect<App>(worker(self));
 |---|---|
 | `port.send(name, data)` | Tell everyone. |
 | `port.on(name, handler)` | Hear it every time. Returns a function that stops listening. |
-| `port.once(name)` | A promise for the next one. |
+| `port.once(name)` | A promise for the next one. Rejects if the port closes first. |
 | `port.ask(name, input)` | Ask, and await the answer. |
 | `port.answer(name, handler)` | Be the one who answers. Return the answer or a promise of it. Returns a function that steps down. |
-| `port.close()` | Stop listening, fail the asks still waiting, let go of the adapters. |
+| `port.close()` | Stop listening, fail every ask and `once` still waiting, let go of the adapters. |
 
 Handlers also get the raw frame as a second argument, if you want to know who sent something: `port.on("user.joined", (data, frame) => frame.from)`.
 
@@ -246,6 +246,8 @@ It rejects, in one of two ways. If the answerer threw, you get an `Error` with t
 | `"timeout"` | Nobody answered in time. |
 | `"unanswered"` | The port has no adapters and no answerer, so nobody could. |
 | `"closed"` | The port closed first. |
+
+A `once` still waiting when its port closes rejects with the same `"closed"` error.
 
 ## Other languages
 
