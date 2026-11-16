@@ -3,7 +3,8 @@ import { connect, custom, type Port } from "../../src/index.ts";
 import type { Kitchen } from "../contract.ts";
 
 type Seat = { link: ReturnType<typeof custom>; port: Port<Kitchen> };
-const menu: Record<string, number> = { bibimbap: 12, kimbap: 6 };
+// A Map, because a client picks the dish: asking a plain object for "constructor" would find one.
+const menu = new Map([["bibimbap", 12], ["kimbap", 6]]);
 
 const server = Bun.serve<Seat>({
   port: Number(process.env.PORT ?? 4117),
@@ -15,7 +16,7 @@ const server = Bun.serve<Seat>({
     open(ws) {
       const link = custom((frame) => ws.send(JSON.stringify(frame)));
       const port = connect<Kitchen>(link, { stacks: false }); // its clients are strangers: no stack traces for them
-      port.answer("price", (dish) => menu[dish] ?? 0);
+      port.answer("price", (dish) => menu.get(dish) ?? 0);
       port.on("order.placed", (order) => {
         setTimeout(() => port.send("order.ready", order), 200);
       });
