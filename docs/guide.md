@@ -218,6 +218,7 @@ Every frame that comes in through an adapter takes the same path:
 | `stacks` | `true` | Send stack traces along with errors. Turn it off on a server whose clients are strangers. |
 | `tap` | none | A function that sees every frame going in or out. Good for logging. |
 | `onError` | `console.error` | Where errors thrown inside `on` handlers, `tap` and adapters go. |
+| `onDisconnect` | none | Told when an adapter says its other side has left for good, with the adapter that said so. |
 
 ## What it leaves to you
 

@@ -596,3 +596,40 @@ describe("what cannot travel", () => {
     expect(errors.map((error) => error.message)).toEqual(["jammed"]);
   });
 });
+
+describe("hearing that the other side left", () => {
+  test("a custom link says so with gone(), and the asks waiting on it fail at once", async () => {
+    const link = custom(() => {});
+    const port = connect<App>(link, { timeout: 2000 });
+    const pending = failure(port.ask("now"));
+    const started = Date.now();
+
+    link.gone();
+
+    expect((await pending)?.code).toBe("disconnected");
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  test("onDisconnect is told which adapter, once", () => {
+    const left: unknown[] = [];
+    const errors: unknown[] = [];
+    const first = custom(() => {});
+    const second = custom(() => {});
+    const port = connect<App>([first, second], {
+      onError: (error) => errors.push(error),
+      onDisconnect: (adapter) => {
+        left.push(adapter);
+        throw new Error("a careless onDisconnect");
+      },
+    });
+
+    first.gone();
+    first.gone();
+    expect(left).toEqual([first]);
+    expect(errors).toHaveLength(1); // what onDisconnect threw went to onError
+
+    port.close();
+    second.gone(); // a closed port has let go already
+    expect(left).toEqual([first]);
+  });
+});

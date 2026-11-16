@@ -116,6 +116,8 @@ export interface Options {
   tap?: (frame: Frame, direction: "in" | "out") => void;
   /** Where errors thrown inside your `on` handlers, your `tap` and adapters go. Default: `console.error`. */
   onError?: (error: unknown) => void;
+  /** Told when an adapter says its other side has left for good, with the adapter that said so. */
+  onDisconnect?: (adapter: Adapter) => void;
 }
 
 /** Stops whatever the call that returned it started. */
@@ -294,6 +296,11 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
   const lose = (link: Adapter) => () => {
     if (closed || lost.has(link)) return;
     lost.add(link);
+    try {
+      options.onDisconnect?.(link);
+    } catch (error) {
+      onError(error);
+    }
     if (links.some((other) => !lost.has(other))) return; // an answer could still come another way
     for (const [id, ask] of waiting) {
       if (!ask.away) continue; // this port is answering it itself
@@ -663,14 +670,30 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
 /**
  * For transports that hand you messages somewhere you can't put a listener:
  * a server's message callback, an Electron IPC handler, a webhook. You say
- * how to send, and call `receive` yourself whenever something arrives.
+ * how to send, and call `receive` yourself whenever something arrives, and
+ * `gone` if the transport tells you the other side has left.
  *
  *   const link = custom((frame) => ws.send(JSON.stringify(frame)));
  *   const port = connect<App>(link);
  *   // ...later, wherever messages show up:
  *   link.receive(message);
  */
-export function custom(send: (frame: Frame) => void): Adapter & { receive(frame: unknown): void } {
+export function custom(send: (frame: Frame) => void): Adapter & { receive(frame: unknown): void; gone(): void } {
   const hub = memory();
-  return { send, listen: hub.listen, receive: hub.send as (frame: unknown) => void };
+  const told = new Set<() => void>(); // one per port listening: how to say the other side has left
+  return {
+    send,
+    listen(receive, gone) {
+      const stop = hub.listen(receive, gone) as Stop;
+      told.add(gone);
+      return () => {
+        told.delete(gone);
+        stop();
+      };
+    },
+    receive: hub.send as (frame: unknown) => void,
+    gone() {
+      for (const gone of [...told]) gone();
+    },
+  };
 }

@@ -154,7 +154,7 @@ connect<App>(lines(socket));
 
 ### `custom(send)`
 
-For transports that hand you messages in a callback you don't control. You say how to send, and call `receive` yourself when something arrives. A WebSocket server is the usual case, with one port per connection, so what a port sends goes to that client only:
+For transports that hand you messages in a callback you don't control. You say how to send, and call `receive` yourself when something arrives, and `gone` if the transport tells you the other side has left. A WebSocket server is the usual case, with one port per connection, so what a port sends goes to that client only:
 
 ```ts
 type Seat = { link: ReturnType<typeof custom>; port: Port<App> };
@@ -224,6 +224,7 @@ connect<App>(adapters, {
   stacks: true,      // send stack traces with errors; turn off facing strangers
   tap: (frame, direction) => console.log(direction, frame), // see every frame
   onError: (error) => report(error), // errors thrown in on() handlers, tap and adapters
+  onDisconnect: (adapter) => note(adapter), // an adapter's other side has left for good
 });
 ```
 
@@ -256,7 +257,7 @@ If nobody answered, you get a `PortError`:
 
 A `once` still waiting when its port closes rejects with the same `"closed"` error.
 
-`"disconnected"` comes from the adapter noticing, so the ask does not have to wait out its timeout. `websocket` notices when the socket closes, `lines` when the stream it reads from ends, and `worker` when a MessagePort closes or a bun or node worker exits. Browsers and deno never say that a `Worker` has died, `memory` and `broadcast` have no single other side to lose, and with `custom` you close the port yourself when the connection ends, as the server above does. A port holding several adapters fails its asks once all of them are gone. It is only told about its own adapters, so an ask that crossed a relay to a port that then died still ends at its timeout.
+`"disconnected"` comes from the adapter noticing, so the ask does not have to wait out its timeout. `websocket` notices when the socket closes, `lines` when a stream ends or fails, and `worker` when a MessagePort closes or a bun or node worker exits. Browsers and deno never say that a `Worker` has died, `memory` and `broadcast` have no single other side to lose, and with `custom` you say so yourself: close the port when the connection ends, as the server above does, or call `link.gone()` to keep the port and tell it. `onDisconnect` hears each adapter as it goes. A port holding several adapters fails its asks once all of them are gone. It is only told about its own adapters, so an ask that crossed a relay to a port that then died still ends at its timeout.
 
 ## Other languages
 
