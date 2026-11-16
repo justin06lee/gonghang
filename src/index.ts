@@ -116,6 +116,8 @@ export interface Options {
   tap?: (frame: Frame, direction: "in" | "out") => void;
   /** Where errors thrown inside your `on` handlers, your `tap` and adapters go. Default: `console.error`. */
   onError?: (error: unknown) => void;
+  /** Told when an adapter says its other side has left for good, with the adapter that said so. */
+  onDisconnect?: (adapter: Adapter) => void;
 }
 
 /** Stops whatever the call that returned it started. */
@@ -209,13 +211,18 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     if (seen.size > 5000) seen.delete(seen.values().next().value as string); // forget the oldest
   };
 
-  /** Push a frame through one adapter, unless nobody is left on the other side of it. */
-  const push = (link: Adapter, f: Frame) => {
-    if (lost.has(link)) return;
+  /**
+   * Push a frame through one adapter, unless nobody is left on the other side
+   * of it. Says whether the adapter took it; what it threw goes to `refused`.
+   */
+  const push = (link: Adapter, f: Frame, refused: (error: unknown) => void = onError): boolean => {
+    if (lost.has(link)) return false;
     try {
       link.send(f);
+      return true;
     } catch (error) {
-      onError(error);
+      refused(error);
+      return false;
     }
   };
 
@@ -246,8 +253,16 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     }
     if (closed) return;
     const answer = frame("answer", question.name, { to: question.id, ...result });
-    if (link) push(link, answer); // back the way the question came
-    else settle(answer); // asked on this very port
+    if (!link) return void settle(answer); // asked on this very port
+
+    // Back the way the question came. An answer that can't make the trip must
+    // not leave the asker waiting, so the reason goes back in its place.
+    let why: unknown;
+    if (push(link, answer, (error) => (why = error)) || lost.has(link)) return;
+    onError(why);
+    const { name, message } = describe(why, false);
+    const sorry = { name, message: `the answer to "${question.name}" could not be sent: ${message}` };
+    push(link, frame("answer", question.name, { to: question.id, error: sorry }), () => {});
   };
 
   /** An answer arrived: finish the ask that was waiting for it. */
@@ -281,6 +296,11 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
   const lose = (link: Adapter) => () => {
     if (closed || lost.has(link)) return;
     lost.add(link);
+    try {
+      options.onDisconnect?.(link);
+    } catch (error) {
+      onError(error);
+    }
     if (links.some((other) => !lost.has(other))) return; // an answer could still come another way
     for (const [id, ask] of waiting) {
       if (!ask.away) continue; // this port is answering it itself
@@ -338,9 +358,16 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
               }, timeout)
             : undefined;
         waiting.set(question.id, { resolve, reject, timer, away: !local });
+        if (local) return void reply(question, local);
 
-        if (local) void reply(question, local);
-        else out(question);
+        // A question no adapter would take can never be answered: fail now, with the reason.
+        const refused: unknown[] = [];
+        let taken = 0;
+        for (const link of links) if (push(link, question, (error) => refused.push(error))) taken++;
+        if (taken) return refused.forEach(onError);
+        if (!refused.length || !waiting.delete(question.id)) return; // the other side left as we asked, and the ask has been told
+        clearTimeout(timer);
+        reject(refused[0]);
       });
     },
 
@@ -560,7 +587,12 @@ export type Readable =
 
 /** Something to write text to: a node stream, a bun FileSink, or a web WritableStream. */
 export type Writable =
-  | { write(text: string): unknown; flush?: () => unknown }
+  | {
+      write(text: string): unknown;
+      flush?: () => unknown;
+      on?: (event: any, listener: (error: any) => void) => unknown;
+      off?: (event: any, listener: (error: any) => void) => unknown;
+    }
   | { getWriter(): { write(chunk: Uint8Array): unknown } };
 
 /**
@@ -614,13 +646,22 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
         };
       }
 
+      // A node stream is over when it ends, closes or fails, and a broken pipe shows up on the writing side.
+      let over = false;
+      const ended = () => {
+        over = true;
+        gone();
+      };
+      const sink = "write" in output && output !== (input as unknown) ? output : undefined;
       input.on("data", feed);
-      input.on("end", gone);
-      input.on("close", gone);
+      for (const event of ["end", "close", "error"]) input.on(event, ended);
+      sink?.on?.("error", ended);
       return () => {
         input.off("data", feed);
-        input.off("end", gone);
-        input.off("close", gone);
+        for (const event of ["end", "close"]) input.off(event, ended);
+        if (over) return; // a stream that died can still fail a write made just before, and in node an unheard "error" ends the process
+        input.off("error", ended);
+        sink?.off?.("error", ended);
       };
     },
   };
@@ -629,14 +670,30 @@ export function lines(input: Readable, output: Writable = input as unknown as Wr
 /**
  * For transports that hand you messages somewhere you can't put a listener:
  * a server's message callback, an Electron IPC handler, a webhook. You say
- * how to send, and call `receive` yourself whenever something arrives.
+ * how to send, and call `receive` yourself whenever something arrives, and
+ * `gone` if the transport tells you the other side has left.
  *
  *   const link = custom((frame) => ws.send(JSON.stringify(frame)));
  *   const port = connect<App>(link);
  *   // ...later, wherever messages show up:
  *   link.receive(message);
  */
-export function custom(send: (frame: Frame) => void): Adapter & { receive(frame: unknown): void } {
+export function custom(send: (frame: Frame) => void): Adapter & { receive(frame: unknown): void; gone(): void } {
   const hub = memory();
-  return { send, listen: hub.listen, receive: hub.send as (frame: unknown) => void };
+  const told = new Set<() => void>(); // one per port listening: how to say the other side has left
+  return {
+    send,
+    listen(receive, gone) {
+      const stop = hub.listen(receive, gone) as Stop;
+      told.add(gone);
+      return () => {
+        told.delete(gone);
+        stop();
+      };
+    },
+    receive: hub.send as (frame: unknown) => void,
+    gone() {
+      for (const gone of [...told]) gone();
+    },
+  };
 }

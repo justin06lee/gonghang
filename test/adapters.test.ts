@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { fork, spawn, type ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { createServer, connect as dial, type Socket as TcpSocket } from "node:net";
 import { fileURLToPath } from "node:url";
 import { Worker as Thread } from "node:worker_threads";
@@ -313,5 +314,23 @@ describe("when the other side goes away", () => {
     cleanup.push(() => port.close(), () => socket.destroy(), () => server.close());
 
     expect(await stranded(port)).toBe("disconnected");
+  });
+});
+
+describe("a stream that died", () => {
+  test("still catches a write that fails late", () => {
+    // In node, a write made just before the other side died fails after the stream has ended,
+    // and an "error" nobody listens for brings the whole process down.
+    const dead = Object.assign(new EventEmitter(), { write: () => {} });
+    const port = connect<App>(lines(dead));
+    cleanup.push(() => port.close());
+
+    dead.emit("end");
+    expect(() => dead.emit("error", new Error("EPIPE"))).not.toThrow();
+
+    // A stream that is merely let go of is left as it was found.
+    const alive = Object.assign(new EventEmitter(), { write: () => {} });
+    connect<App>(lines(alive)).close();
+    expect(alive.eventNames()).toHaveLength(0);
   });
 });
