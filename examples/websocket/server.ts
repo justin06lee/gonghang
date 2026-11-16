@@ -14,7 +14,7 @@ const server = Bun.serve<Seat>({
     // One port per connection: whatever this port sends goes to this client only.
     open(ws) {
       const link = custom((frame) => ws.send(JSON.stringify(frame)));
-      const port = connect<Kitchen>(link);
+      const port = connect<Kitchen>(link, { stacks: false }); // its clients are strangers: no stack traces for them
       port.answer("price", (dish) => menu[dish] ?? 0);
       port.on("order.placed", (order) => {
         setTimeout(() => port.send("order.ready", order), 200);
