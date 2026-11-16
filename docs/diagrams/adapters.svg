@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 364" width="880" height="364" role="img" aria-labelledby="t d">
+  <title id="t">Which adapter for which boundary</title>
+  <desc id="d">From close together to far apart: no adapter for the same port, memory for the same process, worker or broadcast for a thread or tab, lines for another process, websocket or lines for another machine. custom covers anything else.</desc>
+  <defs>
+    <marker id="grey" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#8b94a3"/></marker>
+  </defs>
+  <rect width="880" height="364" rx="18" fill="#1b2431"/>
+
+  <!-- how far apart the two components are -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#aab4c3">
+    <text x="32" y="44">close together</text>
+    <text x="848" y="44" text-anchor="end">far apart</text>
+  </g>
+  <path d="M140 40 H770" stroke="#8b94a3" stroke-width="1.5" fill="none" marker-end="url(#grey)"/>
+
+  <!-- one tile per boundary -->
+  <g fill="#232e3f" stroke="#3a4658" stroke-width="1.5">
+    <rect x="32" y="64" width="152" height="200" rx="12"/>
+    <rect x="198" y="64" width="152" height="200" rx="12"/>
+    <rect x="364" y="64" width="152" height="200" rx="12"/>
+    <rect x="530" y="64" width="152" height="200" rx="12"/>
+    <rect x="696" y="64" width="152" height="200" rx="12"/>
+  </g>
+  <g stroke="#3a4658" stroke-width="1.5">
+    <path d="M48 112 H168"/>
+    <path d="M214 112 H334"/>
+    <path d="M380 112 H500"/>
+    <path d="M546 112 H666"/>
+    <path d="M712 112 H832"/>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#f7f4ec" text-anchor="middle">
+    <text x="108" y="94">same port</text>
+    <text x="274" y="94">same process</text>
+    <text x="440" y="94">thread or tab</text>
+    <text x="606" y="94">another process</text>
+    <text x="772" y="94">another machine</text>
+  </g>
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#ffc933" text-anchor="middle">
+    <text x="108" y="162">no adapter</text>
+    <text x="274" y="162">memory()</text>
+    <text x="440" y="150">worker()</text>
+    <text x="440" y="176">broadcast()</text>
+    <text x="606" y="162">lines()</text>
+    <text x="772" y="150">websocket()</text>
+    <text x="772" y="176">lines()</text>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="10.5" letter-spacing="1" fill="#8b94a3" text-anchor="middle">
+    <text x="108" y="216">TRAVELS AS</text>
+    <text x="274" y="216">TRAVELS AS</text>
+    <text x="440" y="216">TRAVELS AS</text>
+    <text x="606" y="216">TRAVELS AS</text>
+    <text x="772" y="216">TRAVELS AS</text>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13" fill="#f7f4ec" text-anchor="middle">
+    <text x="108" y="238">the same object</text>
+    <text x="274" y="238">the same object</text>
+    <text x="440" y="238">a structured clone</text>
+    <text x="606" y="238">JSON, a line each</text>
+    <text x="772" y="238">JSON</text>
+  </g>
+
+  <!-- anything else -->
+  <rect x="32" y="282" width="816" height="54" rx="12" fill="#232e3f" stroke="#3a4658" stroke-width="1.5"/>
+  <text x="56" y="314" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="13.5" fill="#f7f4ec"><tspan font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#ffc933">custom(send)</tspan><tspan dx="14">for anything else. Or write your own: an adapter is two functions, send and listen.</tspan></text>
+</svg>

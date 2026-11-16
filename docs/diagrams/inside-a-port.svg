@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 482" width="880" height="482" role="img" aria-labelledby="t d">
+  <title id="t">What a port does with a frame that arrives</title>
+  <desc id="d">A frame arrives from an adapter. If it is not a real frame, is on another channel, or was seen before, it is ignored. A send runs the on handlers. An ask is answered if this port answers it. An answer settles the ask it belongs to. Anything not finished here is passed to the other adapters, but only when relay is on.</desc>
+  <defs>
+    <marker id="end" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#ffc933"/></marker>
+    <marker id="grey" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#8b94a3"/></marker>
+  </defs>
+  <rect width="880" height="482" rx="18" fill="#1b2431"/>
+
+  <!-- it arrives, and has to pass the gate -->
+  <rect x="290" y="24" width="300" height="40" rx="20" fill="#232e3f" stroke="#3a4658" stroke-width="1.5"/>
+  <rect x="240" y="96" width="400" height="52" rx="10" fill="#2b3749" stroke="#46546a" stroke-width="1.5"/>
+  <rect x="724" y="102" width="110" height="40" rx="10" fill="none" stroke="#46546a" stroke-width="1.5" stroke-dasharray="5 5"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#f7f4ec" text-anchor="middle">
+    <text x="440" y="49">a frame arrives from an adapter</text>
+    <text x="440" y="127">a real frame, on our channel, not seen before?</text>
+    <text x="779" y="127" font-size="13" fill="#aab4c3">ignored</text>
+  </g>
+  <path d="M440 64 V88" stroke="#ffc933" stroke-width="2.5" fill="none" marker-end="url(#end)"/>
+  <path d="M640 122 H716" stroke="#8b94a3" stroke-width="2" fill="none" marker-end="url(#grey)"/>
+
+  <!-- yes: split by kind -->
+  <g stroke="#ffc933" stroke-width="2.5" fill="none">
+    <path d="M440 148 V178"/>
+    <path d="M160 178 H720"/>
+    <path d="M160 177 V196" marker-end="url(#end)"/>
+    <path d="M440 178 V196" marker-end="url(#end)"/>
+    <path d="M720 177 V196" marker-end="url(#end)"/>
+    <path d="M160 238 V258" marker-end="url(#end)"/>
+    <path d="M440 238 V258" marker-end="url(#end)"/>
+    <path d="M720 238 V258" marker-end="url(#end)"/>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#aab4c3">
+    <text x="678" y="114" text-anchor="middle">no</text>
+    <text x="452" y="167">yes: which kind is it?</text>
+  </g>
+  <g fill="#1b2431" stroke="#ffc933" stroke-width="2">
+    <rect x="100" y="204" width="120" height="34" rx="17"/>
+    <rect x="380" y="204" width="120" height="34" rx="17"/>
+    <rect x="660" y="204" width="120" height="34" rx="17"/>
+  </g>
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="14" font-weight="700" fill="#ffc933" text-anchor="middle">
+    <text x="160" y="226">send</text>
+    <text x="440" y="226">ask</text>
+    <text x="720" y="226">answer</text>
+  </g>
+
+  <!-- what happens to each kind -->
+  <g fill="#2b3749" stroke="#46546a" stroke-width="1.5">
+    <rect x="42" y="266" width="236" height="78" rx="10"/>
+    <rect x="322" y="266" width="236" height="78" rx="10"/>
+    <rect x="602" y="266" width="236" height="78" rx="10"/>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" font-weight="700" fill="#f7f4ec" text-anchor="middle">
+    <text x="160" y="301">run every on() handler</text>
+    <text x="440" y="292">does this port answer it?</text>
+    <text x="720" y="292">is it for one of our asks?</text>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#aab4c3" text-anchor="middle">
+    <text x="160" y="322">listening for that name</text>
+    <text x="440" y="313">yes: run the handler, send the</text>
+    <text x="440" y="330">answer back the way it came</text>
+    <text x="720" y="313">yes: resolve or reject that</text>
+    <text x="720" y="330">promise with it</text>
+  </g>
+
+  <!-- whatever is not finished here may be passed on -->
+  <g stroke="#8b94a3" stroke-width="2" fill="none">
+    <path d="M160 344 V400" marker-end="url(#grey)"/>
+    <path d="M440 344 V400" marker-end="url(#grey)"/>
+    <path d="M720 344 V400" marker-end="url(#grey)"/>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#aab4c3">
+    <text x="172" y="377">and then</text>
+    <text x="452" y="377">if not</text>
+    <text x="732" y="377">if not</text>
+  </g>
+  <rect x="42" y="408" width="796" height="50" rx="10" fill="#232e3f" stroke="#ffc933" stroke-width="2"/>
+  <text x="440" y="438" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14" fill="#f7f4ec">If <tspan font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" fill="#ffc933">relay</tspan> is on, pass the frame out through every other adapter. If not, it stops here.</text>
+</svg>

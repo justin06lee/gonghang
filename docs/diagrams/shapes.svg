@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 364" width="880" height="364" role="img" aria-labelledby="t d">
+  <title id="t">Three shapes you can build</title>
+  <desc id="d">One shared port used by several modules. A hub that several ports connect to, so each hears the others. A relay, where a middle port passes frames between its two adapters.</desc>
+  <defs>
+    <marker id="end" viewBox="0 0 10 10" refX="7" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#ffc933"/></marker>
+    <marker id="start" viewBox="0 0 10 10" refX="3" refY="5" markerUnits="userSpaceOnUse" markerWidth="11" markerHeight="11" orient="auto"><path d="M10 0 L0 5 L10 10 Z" fill="#ffc933"/></marker>
+  </defs>
+  <rect width="880" height="364" rx="18" fill="#1b2431"/>
+  <g fill="#232e3f">
+    <rect x="24" y="24" width="264" height="316" rx="14"/>
+    <rect x="308" y="24" width="264" height="316" rx="14"/>
+    <rect x="592" y="24" width="264" height="316" rx="14"/>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#f7f4ec" text-anchor="middle">
+    <text x="156" y="60">One shared port</text>
+    <text x="440" y="60">A hub</text>
+    <text x="724" y="60">A relay</text>
+  </g>
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" fill="#ffc933" text-anchor="middle">
+    <text x="156" y="84">connect()</text>
+    <text x="440" y="84">memory()</text>
+    <text x="724" y="84">relay: true</text>
+  </g>
+
+  <!-- one shared port: three modules, one port object -->
+  <g stroke="#6c7a8e" stroke-width="2" fill="none">
+    <path d="M78 150 L128 176"/>
+    <path d="M234 150 L184 176"/>
+    <path d="M156 248 V220"/>
+  </g>
+  <g fill="#1b2431" stroke="#46546a" stroke-width="1.5">
+    <rect x="40" y="116" width="76" height="34" rx="8"/>
+    <rect x="196" y="116" width="76" height="34" rx="8"/>
+    <rect x="118" y="248" width="76" height="34" rx="8"/>
+  </g>
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="12.5" fill="#aab4c3" text-anchor="middle">
+    <text x="78" y="137.500">module</text>
+    <text x="234" y="137.500">module</text>
+    <text x="156" y="269.500">module</text>
+  </g>
+  <rect x="112" y="176" width="88" height="44" rx="10" fill="#1b2431" stroke="#ffc933" stroke-width="2.5"/>
+  <text x="156" y="203" text-anchor="middle" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="15" font-weight="700" fill="#f7f4ec">port</text>
+
+  <!-- a hub: three ports around one memory() -->
+  <g stroke="#ffc933" stroke-width="2" fill="none">
+    <path d="M440 150 V172"/>
+    <path d="M378 248 L420 219"/>
+    <path d="M502 248 L460 219"/>
+  </g>
+  <g fill="#1b2431" stroke="#ffc933" stroke-width="2">
+    <rect x="402" y="116" width="76" height="34" rx="8"/>
+    <rect x="324" y="248" width="76" height="34" rx="8"/>
+    <rect x="480" y="248" width="76" height="34" rx="8"/>
+  </g>
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="700" fill="#f7f4ec" text-anchor="middle">
+    <text x="440" y="137.500">port</text>
+    <text x="362" y="269.500">port</text>
+    <text x="518" y="269.500">port</text>
+  </g>
+  <circle cx="440" cy="199" r="28" fill="#ffc933"/>
+  <text x="440" y="203.500" text-anchor="middle" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="700" fill="#1b2431">hub</text>
+
+  <!-- a relay: the middle port joins two adapters -->
+  <path d="M640 168 C 664 128, 784 128, 808 168" stroke="#ffc933" stroke-width="2" stroke-dasharray="5 5" fill="none" marker-start="url(#start)" marker-end="url(#end)"/>
+  <g stroke="#ffc933" stroke-width="2.5" fill="none">
+    <path d="M666 198 H694"/>
+    <path d="M754 198 H782"/>
+  </g>
+  <g fill="#1b2431" stroke="#ffc933" stroke-width="2">
+    <rect x="606" y="178" width="60" height="40" rx="8"/>
+    <rect x="782" y="178" width="60" height="40" rx="8"/>
+  </g>
+  <rect x="694" y="178" width="60" height="40" rx="8" fill="#ffc933"/>
+  <g font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="13" font-weight="700" text-anchor="middle">
+    <text x="636" y="202.500" fill="#f7f4ec">port</text>
+    <text x="724" y="202.500" fill="#1b2431">port</text>
+    <text x="812" y="202.500" fill="#f7f4ec">port</text>
+  </g>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12" fill="#aab4c3" text-anchor="middle">
+    <text x="636" y="240">worker</text>
+    <text x="724" y="240">main thread</text>
+    <text x="812" y="240">worker</text>
+  </g>
+
+  <!-- captions -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="12.5" fill="#aab4c3" text-anchor="middle">
+    <text x="156" y="308">Modules in one process</text>
+    <text x="156" y="325">use the same port object.</text>
+    <text x="440" y="308">Each component owns a port.</text>
+    <text x="440" y="325">Every port hears the others.</text>
+    <text x="724" y="308">The middle port passes frames</text>
+    <text x="724" y="325">from one adapter to the other.</text>
+  </g>
+</svg>

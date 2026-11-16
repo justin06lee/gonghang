@@ -15,6 +15,8 @@
 
 It is one file with no dependencies, and it runs on bun, node, deno and in browsers.
 
+New here? [The guide](docs/guide.md) explains the whole thing with pictures.
+
 ## Install
 
 ```sh
