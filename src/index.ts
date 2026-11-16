@@ -582,14 +582,18 @@ export function websocket(socket: Socket): Adapter {
         for (const text of early.splice(0)) socket.send(text);
       };
       const onMessage = (event: { data: unknown }) => receive(event.data);
+      const onClose = () => {
+        early.length = 0; // nothing will open now to send them
+        gone();
+      };
       socket.addEventListener("open", onOpen);
       socket.addEventListener("message", onMessage);
-      socket.addEventListener("close", gone);
-      if (socket.readyState === 3) gone(); // it had already closed when we got it
+      socket.addEventListener("close", onClose);
+      if (socket.readyState === 3) onClose(); // it had already closed when we got it
       return () => {
         socket.removeEventListener("open", onOpen);
         socket.removeEventListener("message", onMessage);
-        socket.removeEventListener("close", gone);
+        socket.removeEventListener("close", onClose);
       };
     },
   };
