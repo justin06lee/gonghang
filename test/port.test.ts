@@ -134,6 +134,17 @@ describe("one port", () => {
     expect((await failure(a.ask("now")))?.message).toBe("just a string");
   });
 
+  test("a handler's promise need not be a Promise for its failure to reach onError", async () => {
+    const errors: unknown[] = [];
+    const port = connect<App>([], { onError: (error) => errors.push(error) });
+    port.on("tick", () => ({ then: (_: unknown, reject: (error: Error) => void) => reject(new Error("thenable")) }) as never);
+
+    port.send("tick");
+    await wait(0);
+
+    expect(errors.map((error) => (error as Error).message)).toEqual(["thenable"]);
+  });
+
   test("without a contract, anything goes", async () => {
     const port = connect();
     port.answer("double", (n) => n * 2);

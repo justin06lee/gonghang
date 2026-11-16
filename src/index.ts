@@ -238,8 +238,8 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
   const hear = (f: Frame) => {
     for (const listener of [...(listeners.get(f.name) ?? [])]) {
       try {
-        const result = listener(f.data, f);
-        if (result instanceof Promise) result.catch(onError);
+        const result = listener(f.data, f) as { then?: unknown } | undefined;
+        if (typeof result?.then === "function") Promise.resolve(result).catch(onError);
       } catch (error) {
         onError(error);
       }
