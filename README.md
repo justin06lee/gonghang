@@ -80,10 +80,10 @@ const port = connect<App>(worker(self));
 |---|---|
 | `port.send(name, data)` | Tell everyone. |
 | `port.on(name, handler)` | Hear it every time. Returns a function that stops listening. |
-| `port.once(name)` | A promise for the next one. |
+| `port.once(name)` | A promise for the next one. Rejects if the port closes first. |
 | `port.ask(name, input)` | Ask, and await the answer. |
 | `port.answer(name, handler)` | Be the one who answers. Return the answer or a promise of it. Returns a function that steps down. |
-| `port.close()` | Stop listening, fail the asks still waiting, let go of the adapters. |
+| `port.close()` | Stop listening, fail every ask and `once` still waiting, let go of the adapters. |
 
 Handlers also get the raw frame as a second argument, if you want to know who sent something: `port.on("user.joined", (data, frame) => frame.from)`.
 
@@ -222,7 +222,7 @@ connect<App>(adapters, {
   relay: false,      // pass frames between adapters (see Hubs)
   stacks: true,      // send stack traces with errors; turn off facing strangers
   tap: (frame, direction) => console.log(direction, frame), // see every frame
-  onError: (error) => report(error), // errors thrown in on() handlers and adapters
+  onError: (error) => report(error), // errors thrown in on() handlers, tap and adapters
 });
 ```
 
@@ -232,6 +232,7 @@ One ask can have its own patience: `port.ask("sum", input, { timeout: 500 })`.
 
 - **A port hears its own messages.** `send` reaches the handlers on the same port too, like any event emitter.
 - **In one process, delivery is immediate.** Handlers run before `send` returns. Across an adapter, they run when the frame gets there.
+- **A question takes one input.** For several values, make the input an object, like `sum` above. A contract that gives a question two parameters is a type error wherever that question is used.
 - **One answerer per question per port.** A second `answer` for the same name throws. Across ports, the first answer to arrive wins and the rest are dropped.
 - **Data has to survive the trip.** JSON for `websocket` and `lines`, a structured clone for `worker` and `broadcast`. With no adapter or `memory()`, handlers get the very same object, so don't mutate it.
 - **A port trusts its adapters.** Whatever arrives on one is treated as coming from a peer. On a public socket, check inside your handlers who is asking and what they sent.
@@ -246,6 +247,8 @@ It rejects, in one of two ways. If the answerer threw, you get an `Error` with t
 | `"timeout"` | Nobody answered in time. |
 | `"unanswered"` | The port has no adapters and no answerer, so nobody could. |
 | `"closed"` | The port closed first. |
+
+A `once` still waiting when its port closes rejects with the same `"closed"` error.
 
 ## Other languages
 

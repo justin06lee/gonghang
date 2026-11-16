@@ -33,7 +33,16 @@ export type MessageName<C> = { [K in keyof C & string]-?: C[K] extends Fn ? neve
 export type QuestionName<C> = { [K in keyof C & string]-?: C[K] extends Fn ? K : never }[keyof C & string];
 
 /** What you hand over when you ask a question: its one parameter. */
-export type Input<Q> = IsAny<Q> extends true ? any : Q extends (...args: infer A) => any ? A[0] : never;
+export type Input<Q> = IsAny<Q> extends true
+  ? any
+  : Q extends (...args: infer A) => any
+    ? A extends [] | [unknown?]
+      ? A[0]
+      : OneInput
+    : never;
+
+/** What an input becomes when the contract gives a question several parameters, so the mistake shows up wherever it is used. */
+type OneInput = "공항: a question takes one input, so put several values in one object";
 
 /** What comes back from a question: its return type, promises unwrapped. */
 export type Output<Q> = IsAny<Q> extends true ? any : Q extends (...args: any[]) => infer R ? Awaited<R> : never;
@@ -101,7 +110,7 @@ export interface Options {
   stacks?: boolean;
   /** See every frame this port sends out or takes in. Good for logging. */
   tap?: (frame: Frame, direction: "in" | "out") => void;
-  /** Where errors thrown inside your `on` handlers and adapters go. Default: `console.error`. */
+  /** Where errors thrown inside your `on` handlers, your `tap` and adapters go. Default: `console.error`. */
   onError?: (error: unknown) => void;
 }
 
@@ -115,7 +124,7 @@ export interface Port<C = Loose> {
   /** Hear a message every time anyone sends it. Call the returned function to stop. */
   on<K extends MessageName<C>>(name: K, handler: (data: C[K], frame: Frame) => void): Stop;
 
-  /** Wait for the next time a message is sent. */
+  /** Wait for the next time a message is sent. Rejects if the port closes first. */
   once<K extends MessageName<C>>(name: K): Promise<C[K]>;
 
   /** Ask a question and wait for whoever answers it. Rejects on a timeout, or with the error the answerer threw. */
@@ -127,11 +136,11 @@ export interface Port<C = Loose> {
     handler: (input: Input<C[K]>, frame: Frame) => Output<C[K]> | Promise<Output<C[K]>>,
   ): Stop;
 
-  /** Stop listening, fail any asks still waiting, and let go of the adapters. */
+  /** Stop listening, fail any ask or once still waiting, and let go of the adapters. */
   close(): void;
 }
 
-/** Why an ask failed without anyone answering it. */
+/** Why an ask failed without anyone answering it, or a once without its message arriving. */
 export class PortError extends Error {
   /**
    * - `"timeout"`: nobody answered in time
@@ -168,14 +177,24 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
   const answerers = new Map<string, (input: any, frame: Frame) => unknown>(); // name → who answers it
   const waiting = new Map<string, Waiting>(); // ask id → the promise we owe
   const seen = new Set<string>(); // ids of frames already handled, so echoes and loops die here
+  const onces = new Set<() => void>(); // how to fail each once() still waiting, should the port close
   let count = 0;
   let closed = false;
+
+  /** Show a frame to the tap. A tap only watches, so one that throws must not stop the frame. */
+  const show = (f: Frame, direction: "in" | "out") => {
+    try {
+      options.tap?.(f, direction);
+    } catch (error) {
+      onError(error);
+    }
+  };
 
   /** Make a frame of ours, and show it to the tap. */
   const frame = (kind: Frame["kind"], name: string, rest: Partial<Frame>): Frame => {
     const made: Frame = { channel, id: `${key}#${++count}`, from: me, kind, name, ...rest };
     remember(made.id);
-    options.tap?.(made, "out");
+    show(made, "out");
     return made;
   };
 
@@ -240,7 +259,7 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
     const f = read(raw);
     if (closed || !f || f.channel !== channel || seen.has(f.id)) return;
     remember(f.id);
-    options.tap?.(f, "in");
+    show(f, "in");
 
     if (f.kind === "send") hear(f);
     else if (f.kind === "ask") {
@@ -263,16 +282,21 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
 
     on(name: string, handler: (data: any, frame: Frame) => unknown) {
       const set = listeners.get(name) ?? new Set();
-      listeners.set(name, set.add(handler));
-      return () => void set.delete(handler);
+      const listener = (data: unknown, frame: Frame) => handler(data, frame); // one per call, so a handler can listen twice
+      listeners.set(name, set.add(listener));
+      return () => void set.delete(listener);
     },
 
     once(name: string) {
-      return new Promise((resolve) => {
+      return new Promise((resolve, reject) => {
+        if (closed) return reject(new PortError("closed", `waited for "${name}" on a closed port`));
+        const fail = () => reject(new PortError("closed", `the port closed before "${name}" came`));
         const stop = port.on(name, (data) => {
           stop();
+          onces.delete(fail);
           resolve(data);
         });
+        onces.add(fail);
       });
     },
 
@@ -320,6 +344,8 @@ export function connect<C = Loose>(adapters: Adapter | Adapter[] = [], options: 
         ask.reject(new PortError("closed", "the port closed before an answer came"));
       }
       waiting.clear();
+      for (const fail of onces) fail();
+      onces.clear();
       listeners.clear();
       answerers.clear();
     },

@@ -68,6 +68,21 @@ export async function withInterface() {
   port.send("order.cancelled", { id: "a1" });
 }
 
+// A question takes one input. A contract that gives one several is caught wherever it is used.
+interface Crowded {
+  add: (a: number, b: number) => number;
+  join: (...parts: string[]) => string;
+}
+
+export async function oneInput(port: Port<Crowded>) {
+  // @ts-expect-error only the first parameter would ever travel
+  await port.ask("add", 1);
+  // @ts-expect-error a rest parameter is several inputs too
+  await port.ask("join", "a");
+  // @ts-expect-error the answerer is told as well
+  port.answer("add", (a) => a + 1);
+}
+
 // With no contract, every name and every shape is allowed.
 export async function loose() {
   const port = connect();

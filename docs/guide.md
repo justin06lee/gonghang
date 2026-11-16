@@ -82,10 +82,10 @@ That is the whole API:
 |---|---|
 | `port.send(name, data)` | Tell everyone. |
 | `port.on(name, handler)` | Hear a message every time. Returns a function that stops listening. |
-| `port.once(name)` | A promise for the next one. |
+| `port.once(name)` | A promise for the next one. Rejects if the port closes first. |
 | `port.ask(name, input)` | Ask, and await the answer. |
 | `port.answer(name, handler)` | Be the one who answers. Returns a function that steps down. |
-| `port.close()` | Stop listening, fail the asks still waiting, let go of the adapters. |
+| `port.close()` | Stop listening, fail every ask and `once` still waiting, let go of the adapters. |
 
 Three details worth knowing early:
 
@@ -122,6 +122,8 @@ A message is the same thing with `"kind":"send"` and no reply. That is everythin
 | Nobody answered in time | A `PortError` with code `"timeout"`. |
 | The port has no adapters and no answerer | A `PortError` with code `"unanswered"`, straight away. |
 | The port closed first | A `PortError` with code `"closed"`. |
+
+A `once` still waiting when its port closes rejects with the same `"closed"` error.
 
 ## Crossing a boundary
 
@@ -212,14 +214,14 @@ Every frame that comes in through an adapter takes the same path:
 | `relay` | `false` | Pass frames between this port's adapters. |
 | `stacks` | `true` | Send stack traces along with errors. Turn it off on a server whose clients are strangers. |
 | `tap` | none | A function that sees every frame going in or out. Good for logging. |
-| `onError` | `console.error` | Where errors thrown inside `on` handlers and adapters go. |
+| `onError` | `console.error` | Where errors thrown inside `on` handlers, `tap` and adapters go. |
 
 ## What it leaves to you
 
 공항 is small on purpose. These are the things it does not do, so you know to handle them where they matter:
 
 - **Nothing is stored.** A message reaches the ports listening at that moment. A port that connects later never sees it.
-- **A port cannot tell that its link died.** If the other side is gone, an ask fails only when its timeout runs out, and never if the timeout is `0`. In the same way, `once()` waits forever if its message never comes, even after the port closes.
+- **A port cannot tell that its link died.** If the other side is gone, an ask fails only when its timeout runs out, and never if the timeout is `0`. A `once()` has no timeout at all: it waits for as long as its port stays open.
 - **No reconnecting.** An adapter wraps a connection you made. If it drops, making a new one is up to you.
 - **No authentication.** A port trusts its adapters: whatever arrives is treated as coming from a peer. On a public socket, check inside your handlers who is asking and what they sent.
 
