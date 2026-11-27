@@ -4,11 +4,12 @@
     "Typed send/on and ask/answer over a shared contract type",
     "Pluggable adapters: memory, worker, broadcast, websocket, lines, custom",
     "Custom adapter from send and listen, with a gone callback",
-    "Per-call timeouts for ask",
+    "Per-call ask timeouts, where 0 waits indefinitely",
     "Opt-in relay forwarding frames between adapters",
     "Optional stack traces sent back with errors",
     "tap and onError hooks for observing traffic and failures",
     "Dead links fail waiting asks at once with disconnected error",
+    "Size-capped line framing for untrusted stream peers",
     "Zero dependencies in a single source file",
     "Runnable worker, child process, and WebSocket examples"
   ],
